@@ -1,0 +1,57 @@
+# ---- Secrets / Environment ----
+.env
+.env.local
+.env.*.local
+.env.production
+*.key
+*.pem
+service-account*.json
+
+# ---- Dependencies ----
+node_modules/
+.pnp
+.pnp.js
+
+# ---- Next.js build ----
+.next/
+out/
+build/
+dist/
+next-env.d.ts
+
+# ---- Vercel / Supabase ----
+.vercel
+.supabase/
+supabase/.temp/
+
+# ---- Test / Coverage ----
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# ---- Logs ----
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- OS / Editor ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# ---- ห้าม commit ข้อมูลผู้ป่วยจริงเด็ดขาด (ดู AI_RULES.md) ----
+# ไฟล์ข้อมูลดิบทุกชนิดต้องผ่านการตรวจก่อน commit เท่านั้น
+data/raw/
+data/private/
+*.patient.csv
+*.phi.*
+seed-real-*.sql
+
+# ---- เอกสารต้นฉบับ workshop (เก็บนอก repo) ----
+*.docx
