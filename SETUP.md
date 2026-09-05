@@ -1,7 +1,13 @@
 # SETUP.md — scaffold โครงการ Next.js
 
 > เอกสารนี้ครอบคลุม **Prompt 01** ใน [docs/CLAUDE-PROMPTS.md](./docs/CLAUDE-PROMPTS.md)
-> ทำครั้งเดียวตอนเริ่มโครงการ หลังจากนี้ใช้ [README.md](./README.md) อย่างเดียว
+>
+> ## ✅ ขั้นตอนในเอกสารนี้ทำเสร็จแล้ว
+>
+> โครงการ scaffold เรียบร้อยและ commit ลง repo แล้ว **ไม่ต้องทำซ้ำ**
+> ถ้า clone repo มาใหม่ ให้ข้ามไปที่ [README.md](./README.md) แล้วรัน `npm install` ได้เลย
+>
+> เก็บเอกสารนี้ไว้เป็นบันทึกว่า scaffold ด้วยคำสั่งอะไร และทำไมต้องแยก Supabase client เป็น 3 ไฟล์
 
 ---
 
