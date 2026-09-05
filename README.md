@@ -175,6 +175,7 @@ npx supabase gen types typescript --project-id <ref> > src/types/database.ts
 
 | ไฟล์ | เนื้อหา |
 |---|---|
+| **[HANDOFF.md](./HANDOFF.md)** | **สถานะปัจจุบัน สิ่งที่ต้องทำต่อ และข้อควรระวัง — อ่านก่อนเริ่มงาน** |
 | [PROJECT.md](./PROJECT.md) | Problem, User, Workflow, Features, Outcome |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Technology และ architecture |
 | [DATABASE.md](./DATABASE.md) | Schema, keys, relationships, RLS |
