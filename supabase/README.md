@@ -121,10 +121,33 @@ node supabase/tests/local/run.mjs
 
 ## สถานะการทดสอบ
 
-migration ทั้ง 11 ไฟล์ · seed ทั้ง 3 ไฟล์ · test ทั้ง 25 ข้อ
-รันผ่านแล้วบน **PostgreSQL 18.3** (PGlite) ด้วย `tests/local/run.mjs`
+| สภาพแวดล้อม | ผล |
+|---|---|
+| **PGlite (PostgreSQL 18.3) ในเครื่อง** | ✅ migration 11 · seed 3 · test 25/25 PASS |
+| **Supabase จริง (PostgreSQL 17)** | ✅ migration 11 · seed 3 · `rls_test` 11/11 · `trigger_test` 14/14 PASS |
 
-**ยังไม่ได้รันบน Supabase จริง** — ต้องรันซ้ำที่นั่นก่อน deploy เสมอ
+ตรวจเพิ่มบน Supabase จริงแล้วว่า
+ตาราง 8 · เปิด RLS ครบทุกตาราง · policy 18 · enum 9 · view 3 ตั้ง `security_invoker=on` ครบ
+· trigger 7 ตัวชื่อตรงตาม migration · helper function ทั้ง 4 ตัวเป็น `SECURITY DEFINER`
+
+---
+
+## สิ่งที่ Supabase มีเพิ่มมาเอง — `rls_auto_enable`
+
+โปรเจกต์ Supabase มี event trigger ชื่อ `public.rls_auto_enable` ติดมาให้
+มันเปิด RLS ให้ **ทุกตารางที่ถูกสร้างใหม่ใน schema `public`** โดยอัตโนมัติ
+
+ตรวจโค้ดแล้วปลอดภัย — คำสั่งเดียวที่มันรันคือ `enable row level security`
+เพิ่มการป้องกันอย่างเดียว ไม่มีคำสั่งที่ลดสิทธิ์ และตั้ง `search_path` เป็น `pg_catalog` กัน hijack
+เป็นตาข่ายชั้นที่สองที่ตรงกับกฎ "ทุกตารางใหม่ต้องมี RLS" ของโครงการพอดี **ปล่อยไว้**
+
+**ผลข้างเคียงที่ต้องรู้** — ตารางชั่วคราวที่ไฟล์ทดสอบสร้างขึ้นเพื่อพักผลลัพธ์
+จะถูกเปิด RLS ไปด้วย และตารางที่เปิด RLS โดยไม่มี policy คือตารางที่ปฏิเสธทุกคน
+`rls_test.sql` และ `trigger_test.sql` จึงมี `alter table ... disable row level security`
+กำกับไว้หลังสร้างตารางพักผล — **ห้ามลบบรรทัดนั้นออก** มิฉะนั้นไฟล์ทดสอบจะล้มทั้งไฟล์
+
+PGlite ไม่มี event trigger ตัวนี้ จึงจับปัญหานี้ไม่ได้ — เป็นตัวอย่างรูปธรรมว่าทำไม
+ต้องรันชุดทดสอบบน Supabase จริงอีกรอบเสมอ ไม่ใช่เชื่อผลจากในเครื่องอย่างเดียว
 
 ---
 
