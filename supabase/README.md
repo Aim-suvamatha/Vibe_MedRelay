@@ -51,14 +51,17 @@ where schemaname = 'public'
 order by tablename;
 ```
 
-**2. รันชุดทดสอบ RLS**
+**2. รันชุดทดสอบ 2 ไฟล์**
 
 ```
-tests/rls_test.sql
+tests/rls_test.sql       → 11 ข้อ  ความปลอดภัย
+tests/trigger_test.sql   → 14 ข้อ  auto timestamp (F6)
 ```
 
-ทั้งไฟล์อยู่ใน transaction ที่ปิดท้ายด้วย `rollback` จึงไม่ทิ้งอะไรไว้
-ผลลัพธ์ต้องเป็น `PASS` ทุกข้อ ถ้ามี `FAIL` **ห้าม deploy**
+ทั้งสองไฟล์อยู่ใน transaction ที่ปิดท้ายด้วย `rollback` จึงไม่ทิ้งอะไรไว้
+ผลออกมาเป็นตารางท้ายไฟล์พร้อมบรรทัดสรุป ต้องเป็น `PASS` ทุกแถว **ถ้ามี `FAIL` ห้าม deploy**
+
+`rls_test.sql`
 
 | Test | พิสูจน์อะไร |
 |---|---|
@@ -69,6 +72,39 @@ tests/rls_test.sql
 | T6–T7 | `assessment` และ `event_log` ไม่มี policy UPDATE/DELETE — ใครก็ลบไม่ได้ |
 | T8–T9 | constraint เวลาปฏิเสธลำดับเวลาที่เป็นไปไม่ได้ |
 | T10 | ตารางเลขรัน `case_code` ไม่มี policy ให้ client แตะ |
+
+`trigger_test.sql` — เดิน status ทีละขั้นเหมือนผู้ใช้กดปุ่มจริง
+
+| Test | พิสูจน์อะไร |
+|---|---|
+| A1–A3 | `case_code` เติมเองในรูปแบบ `MR-2569-0001` และเลขรันไม่ซ้ำ |
+| B1–B3 | timestamp ครบทั้ง 5 ขั้นโดยไม่มีใครกรอกเวลา และเรียงจากน้อยไปมาก |
+| C1–C4 | เคสปิดเองเมื่อทอดสุดท้ายจบ · กลับมา active เมื่อมีทอดถัดไป · ปิดอีกครั้ง |
+| D1–D2 | `event_log` บันทึกครบทุกการเปลี่ยนสถานะและการเปิดเคส |
+| E1 | ข้าม `pending → completed` ไม่ได้ |
+| F1 | ทุกทอดถูกยกเลิก เคสเป็น `cancelled` ไม่ใช่ `completed` |
+
+> **ทำไมต้องมี `trigger_test.sql` แยก** — `seed_demo_cases.sql` ใส่ timestamp ลงไปตรงๆ
+> เพื่อให้แดชบอร์ดมีตัวเลขให้ดูตอนสาธิต จึงข้าม trigger ไปทั้งหมด
+> ข้อมูลใน seed ไม่ได้พิสูจน์ว่า F6 ทำงาน — ไฟล์นี้ต่างหากที่พิสูจน์
+
+---
+
+## รันทดสอบในเครื่องก่อนแตะ Supabase (แนะนำ)
+
+`tests/local/run.mjs` รัน migration + seed + test ทั้งหมดบน **PGlite**
+(PostgreSQL ที่คอมไพล์เป็น WASM รันในโปรเซส Node) — ไม่ต้องมี Docker ไม่ต้องมี Postgres
+
+```bash
+npm install --save-dev @electric-sql/pglite
+node supabase/tests/local/run.mjs
+```
+
+ใช้จับ syntax error และ logic error ก่อนไปนั่งวางทีละไฟล์ใน SQL Editor
+`tests/local/shim.sql` จำลอง `auth` schema, `auth.uid()` และ role `anon`/`authenticated`
+ที่ Supabase มีให้อยู่แล้ว — **ห้ามรัน `shim.sql` บน Supabase จริงเด็ดขาด** จะทำให้ auth พัง
+
+⚠️ ไม่ใช่ของแทน Supabase — ยังต้องรัน `rls_test.sql` บนโปรเจกต์จริงอีกรอบก่อน deploy เสมอ
 
 ---
 
@@ -82,6 +118,13 @@ tests/rls_test.sql
 | `close_case_when_last_leg_done` (§4) | ไม่ได้เป็น `security definer` — transporter ที่กดส่งมอบไม่มีสิทธิ์ `update` ตาราง `case` ตาม RLS ของ §5.2 ทำให้ trigger ล้มทั้ง transaction | เปลี่ยนเป็น `sync_case_status` แบบ `security definer` และเพิ่มการเลื่อน `requested → active` |
 | เคสที่ต้องส่งทอดถัดไป | เคสถูกปิดตั้งแต่ทอดแรกจบ พอผู้รับสร้างทอดที่ 2 เคสยังคงสถานะ `completed` | เพิ่ม trigger `reopen_case_on_new_leg` |
 | `case_code` | §3.4 ประกาศ `not null` แต่ไม่มีกลไกสร้างเลข | เพิ่ม `next_case_code()` + ตารางนับที่ล็อกแถวเอง กันเลขชนเมื่อเปิดเคสพร้อมกัน |
+
+## สถานะการทดสอบ
+
+migration ทั้ง 11 ไฟล์ · seed ทั้ง 3 ไฟล์ · test ทั้ง 25 ข้อ
+รันผ่านแล้วบน **PostgreSQL 18.3** (PGlite) ด้วย `tests/local/run.mjs`
+
+**ยังไม่ได้รันบน Supabase จริง** — ต้องรันซ้ำที่นั่นก่อน deploy เสมอ
 
 ---
 

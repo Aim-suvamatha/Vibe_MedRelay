@@ -66,8 +66,11 @@ begin
       (patient_alias, origin_unit_id, precedence, triage, chief_complaint, mechanism,
        operation_type, symptom_onset_at, status, created_by, requested_at, is_synthetic)
     values
+      -- เปิดเคสเป็น 'active' ก่อน แล้วค่อยปิดหลัง insert ทอดครบ
+      -- ถ้าใส่ 'completed' ตั้งแต่แรก trigger reopen_case_on_new_leg จะดึงกลับเป็น active
+      -- ทันทีที่ insert ทอดแรก เพราะมันถูกออกแบบมาให้เปิดเคสที่ปิดไปแล้วเมื่อมีทอดถัดไป
       (r.alias, u_bna, r.prec::public.precedence_level, r.tri::public.triage_color,
-       r.cc, r.mech, r.op, t0 - interval '18 minutes', 'completed', p_sender, t0, true)
+       r.cc, r.mech, r.op, t0 - interval '18 minutes', 'active', p_sender, t0, true)
     returning id into c_id;
 
     -- ทอดที่ 1 — ที่พยาบาลกองพัน ก -> ที่พยาบาลกองพล
@@ -103,7 +106,8 @@ begin
       l1_hand := l1_hand + interval '66 minutes';
     end if;
 
-    update public."case" set closed_at = l1_hand where id = c_id;
+    -- ปิดเคสหลังทอดครบแล้ว จุดนี้ trigger จะไม่ยุ่งอีกเพราะไม่มี insert ทอดตามมา
+    update public."case" set status = 'completed', closed_at = l1_hand where id = c_id;
 
     -- audit trail ให้หน้า F3 มีลำดับเวลาให้แสดง
     insert into public.event_log (case_id, leg_id, actor_id, action, from_value, to_value, created_at)
@@ -182,6 +186,7 @@ begin
 end $$;
 
 -- ตรวจผล
-select case_code, patient_alias, precedence, triage, status, leg_count, total_evacuation_time
+-- v_case_metrics ไม่มี patient_alias โดยเจตนา — ระบบใช้ case_code แทนตัวระบุผู้ป่วย
+select case_code, precedence, triage, status, leg_count, total_evacuation_time
 from public.v_case_metrics
 order by first_requested_at desc;
