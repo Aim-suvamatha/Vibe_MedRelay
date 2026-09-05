@@ -20,6 +20,17 @@ begin;
 -- ที่เก็บผล — เป็นตารางธรรมดาไม่ใช่ temp table เพราะต้องเขียนได้จากหลาย role
 -- ถูกลบไปพร้อม rollback ท้ายไฟล์
 create table public._rls_result (seq int, test text, result text, note text);
+
+-- ⚠ ต้อง disable RLS ให้ตารางนี้โดยเฉพาะ
+--   Supabase มี event trigger ชื่อ rls_auto_enable ที่เปิด RLS ให้ทุกตาราง
+--   ที่ถูกสร้างใหม่ใน schema public โดยอัตโนมัติ
+--   ตารางที่เปิด RLS แต่ไม่มี policy คือตารางที่ปฏิเสธทุกคน
+--   การ insert ผลทดสอบตอนสวมบทบาท authenticated จะล้มทั้งไฟล์
+--
+--   ตารางนี้เป็นที่พักผลทดสอบชั่วคราวที่ rollback ทิ้งท้ายไฟล์ ไม่มีข้อมูลผู้ป่วย
+--   จึงปิด RLS ได้โดยไม่ขัดกับกฎของโครงการ
+--   (บน PostgreSQL เปล่าที่ไม่มี event trigger ตัวนี้ คำสั่งนี้ไม่มีผลอะไร)
+alter table public._rls_result disable row level security;
 grant all on public._rls_result to public;
 
 

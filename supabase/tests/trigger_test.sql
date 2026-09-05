@@ -14,6 +14,8 @@
 begin;
 
 create table public._trg_result (seq int, test text, result text, note text);
+-- เหตุผลเดียวกับ rls_test.sql — Supabase เปิด RLS ให้ตารางใหม่อัตโนมัติ
+alter table public._trg_result disable row level security;
 
 do $$
 declare
