@@ -99,12 +99,16 @@ cp .env.example .env.local
 
 ### 4. สร้างฐานข้อมูล
 
-เปิด **Supabase Dashboard → SQL Editor** แล้วรัน SQL จาก [DATABASE.md](./DATABASE.md) **ตามลำดับใน §7** เท่านั้น
+เปิด **Supabase Dashboard → SQL Editor** แล้วรันไฟล์ใน [supabase/migrations/](./supabase/migrations/) **ตามลำดับเลขหน้าไฟล์** เท่านั้น
 
 ```
-enums → unit → profile → vehicle → case → transfer_leg → assessment
-→ event_log → functions/triggers → RLS + policies → views → seed
+0001 enums → 0002 unit → 0003 profile → 0004 vehicle → 0005 case
+→ 0006 transfer_leg → 0007 assessment → 0008 event_log
+→ 0009 functions/triggers → 0010 RLS + policies → 0011 views
 ```
+
+จากนั้นใส่ข้อมูลจำลอง `supabase/seed.sql` → `supabase/seed_profiles.sql` → `supabase/seed_demo_cases.sql`
+รายละเอียดแต่ละไฟล์และสิ่งที่ต้องเตรียมก่อน → [supabase/README.md](./supabase/README.md)
 
 หรือถ้าใช้ Supabase CLI
 
@@ -121,6 +125,10 @@ from pg_tables
 where schemaname = 'public'
 order by tablename;
 ```
+
+**แล้วรันชุดทดสอบ RLS** — [supabase/tests/rls_test.sql](./supabase/tests/rls_test.sql)
+ทั้งไฟล์อยู่ใน transaction ที่ปิดท้ายด้วย `rollback` จึงไม่ทิ้งอะไรไว้
+ผลต้องเป็น `PASS` ทุกข้อ **ถ้ามี `FAIL` ห้าม deploy**
 
 ### 5. รันระบบ
 
@@ -171,6 +179,8 @@ npx supabase gen types typescript --project-id <ref> > src/types/database.ts
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Technology และ architecture |
 | [DATABASE.md](./DATABASE.md) | Schema, keys, relationships, RLS |
 | [AI_RULES.md](./AI_RULES.md) | AI safety, privacy, security |
+| [SETUP.md](./SETUP.md) | ขั้นตอน scaffold โครงการ Next.js (ทำก่อน `npm install`) |
+| [supabase/README.md](./supabase/README.md) | ลำดับการรัน migration และการตรวจ RLS |
 | [docs/CLAUDE-PROMPTS.md](./docs/CLAUDE-PROMPTS.md) | Prompt 10 ชุดสำหรับสร้างระบบนี้ |
 | [docs/testing.md](./docs/testing.md) | Checklist สำหรับทดสอบระบบ |
 | [docs/demo-script.md](./docs/demo-script.md) | สคริปต์นำเสนอผลงาน |
