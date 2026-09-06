@@ -1,0 +1,51 @@
+# =============================================================
+# .vercelignore — ควบคุมว่า `vercel deploy` จะอัปโหลดอะไรจากเครื่องนี้
+#
+# ทำไมต้องมีไฟล์นี้ทั้งที่ .gitignore กันไว้แล้ว
+#   .gitignore คุมแค่ git ส่วน `vercel deploy` จาก CLI อัปโหลดไฟล์จาก "โฟลเดอร์ในเครื่อง"
+#   ไม่ใช่จาก git ไฟล์ที่ git ไม่รู้จักจึงยังหลุดขึ้น Vercel ได้
+#   ไฟล์นี้จึงเป็นด่านที่สองที่กันเรื่องนั้นโดยเฉพาะ
+#
+# ⚠ ถ้าเพิ่มโฟลเดอร์ที่มีข้อมูลจริงเข้ามาในโครงการอีก ต้องเพิ่มทั้งที่นี่และใน .gitignore
+#   การเพิ่มที่เดียวไม่พอ
+# =============================================================
+
+# ---- 🔴 ข้อมูลจริง ห้ามออกจากเครื่องนี้เด็ดขาด (AI_RULES §3) ----
+supabase/Report/
+WireframeV3/
+Image*.png
+data/raw/
+data/private/
+*.patient.csv
+*.phi.*
+seed-real-*.sql
+
+# ---- Secrets ----
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+service-account*.json
+
+# ---- ไม่จำเป็นต่อการ build บน Vercel ----
+# Vercel รัน migration เองไม่ได้อยู่แล้ว และไฟล์เหล่านี้ไม่ถูกอ้างถึงจากโค้ดของแอป
+supabase/migrations/
+supabase/scripts/
+supabase/tests/
+supabase/*.sql
+
+# ---- เอกสาร ----
+docs/
+*.docx
+HANDOFF.md
+AI_RULES.md
+PROJECT.md
+DATABASE.md
+
+# ---- ของที่ build ใหม่อยู่แล้ว ----
+.next/
+coverage/
+playwright-report/
+test-results/
+.DS_Store
