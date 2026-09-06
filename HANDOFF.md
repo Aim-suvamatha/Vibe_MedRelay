@@ -217,25 +217,38 @@ migration `0001`–`0015` รันบนโปรเจกต์จริงเ
 
 **กับดัก 2 ข้อที่เจอตอน deploy ครั้งแรก บันทึกไว้กันเสียเวลาซ้ำ**
 
-1. **🔴 env var ที่เป็นแบบ Sensitive ทำให้ `NEXT_PUBLIC_*` กลายเป็นค่าว่าง**
+1. **🔴 env var แบบ Sensitive ใช้กับโครงการนี้ไม่ได้เลยสักตัว**
 
-   ตัวแปรที่ถูกสร้างเป็น Sensitive จะอ่านกลับไม่ได้เลย แต่ `NEXT_PUBLIC_*`
-   **ต้องอ่านได้ตอน build** เพื่อฝังลงบันเดิล ผลคือแอปขึ้น Internal Server Error
-   พร้อม log ว่า `Your project's URL and Key are required to create a Supabase client!`
-   ทั้งที่หน้า Dashboard แสดงว่าตั้งค่าไว้ครบแล้ว — เป็น error ที่ชี้ผิดที่มาก
+   Vercel มี env var สองชนิด — `Config` (อ่านกลับได้) กับ `Secret` (อ่านกลับไม่ได้)
+   **โครงการนี้ต้องใช้ `Config` ทุกตัว** เพราะ Next.js 16 + Turbopack ฝังค่า `process.env.*`
+   ลงบันเดิลตั้งแต่ตอน build ค่าที่ build อ่านไม่ได้จึงกลายเป็น `undefined` ตอนรัน
 
-   วิธีตรวจว่าโดนปัญหานี้อยู่หรือไม่
+   อาการคือแอปขึ้น Internal Server Error ทั้งที่หน้า Dashboard แสดงว่าตั้งค่าครบแล้ว
+   เป็น error ที่ชี้ผิดที่มาก เพราะไปดู Dashboard แล้วจะเห็นว่า "ก็ตั้งไว้แล้วนี่"
+
+   **เจอสองรอบ** รอบแรกกลุ่ม `NEXT_PUBLIC_*` (พังทุกหน้า) รอบสองคือ
+   `SUPABASE_SERVICE_ROLE_KEY` (หน้าเว็บเปิดได้ แต่กดล็อกอินแล้วพัง เพราะ
+   `createAdminClient()` ใช้ตัวนี้แปลงเลขทหาร → บัญชีผู้ใช้)
+
+   ⚠️ **CLI ตั้งเป็น `Secret` ให้เองโดยอัตโนมัติ** สำหรับ Production/Preview
+   ต้องใส่ `--no-sensitive` ทุกครั้ง มิฉะนั้นจะพังซ้ำ
+
+   ```bash
+   vercel env rm  SUPABASE_SERVICE_ROLE_KEY production --yes
+   awk -F= '$1=="SUPABASE_SERVICE_ROLE_KEY"{sub(/^[^=]*=/,""); printf "%s", $0}' .env.local \
+     | vercel env add SUPABASE_SERVICE_ROLE_KEY production --no-sensitive
+   ```
+
+   **วิธีตรวจว่าโดนปัญหานี้อยู่หรือไม่** — ถ้าได้ `[SENSITIVE]` แปลว่าโดน
 
    ```bash
    vercel env pull --environment=production /tmp/check
-   grep NEXT_PUBLIC_SUPABASE_URL /tmp/check   # ถ้าได้ [SENSITIVE] คือโดน
+   grep SUPABASE /tmp/check
+   vercel env ls | grep Secret     # ทุกบรรทัดที่เป็น Secret คือระเบิดเวลา
    ```
 
-   วิธีแก้คือลบแล้วเพิ่มใหม่เป็นแบบธรรมดา — ค่าพวกนี้เป็นสาธารณะโดยธรรมชาติอยู่แล้ว
-   (ถูกส่งไปที่ browser ทุกครั้ง) การตั้งเป็น Sensitive จึงไม่ได้เพิ่มความปลอดภัยเลย
-
-   **`SUPABASE_SERVICE_ROLE_KEY` ให้คงเป็น Sensitive ไว้** เพราะเป็นความลับจริง
-   และโค้ดอ่านตอน runtime เท่านั้น ไม่ต้องใช้ตอน build
+   **แก้ค่า env แล้วต้อง `vercel --prod` ใหม่เสมอ** เพราะค่าถูกฝังตอน build
+   การแก้ค่าเฉยๆ ไม่มีผลกับ deploy ที่สร้างไปแล้ว
 
 2. **URL ที่ลงท้ายด้วย `-aim-suvamatha-s-projects.vercel.app` คนนอกเข้าไม่ได้**
 
