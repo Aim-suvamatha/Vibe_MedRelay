@@ -55,3 +55,26 @@ export const getProfile = cache(async (): Promise<CurrentProfile | null> => {
     roles: (data.roles ?? []) as AppRole[],
   };
 });
+
+/**
+ * ผู้ใช้คนนี้ถือบทบาทใดบทบาทหนึ่งในรายการหรือไม่ — ฝั่ง server
+ *
+ * ★ ต่างจาก RoleGate โดยสิ้นเชิง อย่าสับสนกัน
+ *   RoleGate รันบน browser จึงแค่ "ไม่วาด" ของที่ถูกส่งไปถึงเครื่องแล้ว
+ *   function นี้รันบน server จึงใช้ตัดสินใจได้ว่า **จะยิง query หรือไม่ยิง**
+ *
+ *   หน้าไหนที่ดึงข้อมูลมาแล้วค่อยเอา RoleGate ครอบ = ข้อมูลถูกส่งไปถึงเครื่อง
+ *   ของคนที่ไม่ควรเห็นเรียบร้อยแล้ว ต่อให้จอไม่แสดงก็ตาม
+ *   ซึ่งเป็นสิ่งที่คอมเมนต์ใน role-gate.tsx ห้ามไว้ตรงๆ
+ *
+ * ยังไม่ใช่ชั้นความปลอดภัยสุดท้ายอยู่ดี — RLS ใน 0010 เป็นชั้นนั้น
+ * function นี้แค่ทำให้ไม่ต้องส่งข้อมูลออกไปโดยไม่จำเป็น
+ */
+export function hasAnyRole(
+  profile: CurrentProfile | null,
+  roles: readonly AppRole[],
+): boolean {
+  if (!profile) return false;
+  if (profile.roles.includes("admin")) return true;
+  return roles.some((r) => profile.roles.includes(r));
+}
