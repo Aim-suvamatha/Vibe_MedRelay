@@ -8,6 +8,10 @@
 [![Supabase](https://img.shields.io/badge/Supabase-Postgres_+_RLS-3FCF8E?logo=supabase&logoColor=white)](https://supabase.com)
 [![Vercel](https://img.shields.io/badge/Deploy-Vercel-000?logo=vercel)](https://vercel.com)
 
+### ▶ ระบบทำงานอยู่จริงที่ **https://medrelay-five.vercel.app**
+
+ไม่ต้องติดตั้งอะไรเพื่อดูระบบ · อยากรันเองใช้เวลา 5 นาที → [รันระบบใน 5 นาที](#-รันระบบใน-5-นาที)
+
 ---
 
 ## ปัญหาที่ระบบนี้แก้
@@ -28,15 +32,25 @@
 
 ## ฟีเจอร์หลัก (Phase 1)
 
-| | ฟีเจอร์ | ใครใช้ |
-|---|---|---|
-| **F1** | หน้าขอส่งกลับ (ฟิลด์ออกแบบจาก 9-line MEDEVAC request) | Sender — เสนารักษ์ต้นทาง |
-| **F2** | หน้าศูนย์สั่งการ — คิวคำขอ จัดรถและชุด | Monitor — ศูนย์สั่งการ |
-| **F3** | หน้าติดตามสถานะ — ลำดับเวลาทุกขั้น | ทุกบทบาท |
-| **F4** | แดชบอร์ด — response time, การกระจายตามความเร่งด่วน | Monitor / ผบ.หน่วย |
-| **F5** | หน้ารับผู้ป่วยปลายทาง — เห็นข้อมูลก่อนผู้ป่วยถึงประตู | Receiver — แพทย์/พยาบาลปลายทาง |
-| **F6** | Auto timestamp — เวลาเกิดจากการกดปุ่มทำงานปกติ | ระบบ |
-| **F7** | Export รายงานสรุปกำลังพลบาดเจ็บ | Monitor |
+| | ฟีเจอร์ | ใครใช้ | สถานะ |
+|---|---|---|---|
+| **F1** | หน้าขอส่งกลับ (ฟิลด์ออกแบบจาก 9-line MEDEVAC request) | Sender — เสนารักษ์ต้นทาง | ✅ ใช้งานได้ |
+| **F2** | หน้าศูนย์สั่งการ — คิวคำขอ จัดรถและชุด กระดานรถ | Monitor — ศูนย์สั่งการ | ✅ ใช้งานได้ |
+| **F3** | หน้าติดตามสถานะ — เส้นเวลา 6 ขั้นต่อทอด | ทุกบทบาท | ✅ ใช้งานได้ |
+| **F4** | แดชบอร์ด — มัธยฐาน response time และการกระจาย | Monitor / ผบ.หน่วย | ✅ ใช้งานได้ |
+| **F5** | หน้ารับผู้ป่วยปลายทาง — เห็นข้อมูลก่อนผู้ป่วยถึงประตู | Receiver — แพทย์/พยาบาลปลายทาง | ✅ ใช้งานได้ |
+| **F6** | Auto timestamp — เวลาเกิดจากการกดปุ่มทำงานปกติ | ระบบ | ✅ ใช้งานได้ |
+| **F7** | Export รายงานสรุปกำลังพลบาดเจ็บ | Monitor | ⬜ view พร้อมแล้ว ยังไม่ทำ UI |
+
+**สิ่งที่ระบบนี้บังคับด้วยโครงสร้าง ไม่ใช่ด้วยความตั้งใจ**
+
+- **ไม่มีช่องกรอกเวลาด้วยมือที่ใดในระบบเลยแม้แต่ช่องเดียว** — ทุก timestamp ตั้งโดย
+  trigger ในฐานข้อมูลตอนสถานะเปลี่ยน นาฬิกาเครื่องผู้ใช้จึงทำให้ตัวเลขเพี้ยนไม่ได้
+- **ข้ามขั้นตอนไม่ได้** — constraint `leg_time_order` ปฏิเสธการบันทึกเวลาส่งมอบ
+  ผู้ป่วยที่ยังไม่เคยไปถึง หน้าจอจึงแสดงปุ่มของขั้นถัดไปเพียงขั้นเดียว
+- **ข้อมูลผู้ป่วยจริงเข้าระบบไม่ได้** — RLS policy บังคับ `is_synthetic = true` ตอน insert
+- **ผลประเมินผูกกับเคส ไม่ใช่กับทอด** — สิ่งที่บันทึกในทอดแรกจึงเปิดดูได้จากทุกทอดถัดไป
+  โดยไม่ต้องคัดลอกข้อมูล นี่คือโจทย์หลักที่ระบบนี้แก้
 
 ---
 
@@ -56,107 +70,168 @@
 
 ---
 
-## เริ่มต้นใช้งาน
+## 🚀 รันระบบใน 5 นาที
 
-### สิ่งที่ต้องมีก่อน
+มีสองทาง เลือกทางเดียวพอ
 
-- **Node.js 20 LTS ขึ้นไป** — ตรวจด้วย `node -v`
-- **บัญชี Supabase** (ใช้ free tier ได้) — https://supabase.com
-- **บัญชี GitHub** และ **Vercel** สำหรับ deploy
-- **git** — ตรวจด้วย `git --version`
+### ทาง ก · ดูระบบที่ทำงานอยู่จริง — 1 นาที
 
-### 1. Clone และติดตั้ง
+**https://medrelay-five.vercel.app**
+
+ระบบ deploy อยู่แล้วพร้อมข้อมูลจำลอง ไม่ต้องติดตั้งอะไรเลย
+บัญชีทดสอบมี 4 บัญชีตามบทบาท (เลขประจำตัว `9900000001`–`9900000004`)
+
+> **รหัสผ่านไม่ได้อยู่ใน repo นี้โดยเจตนา** — repo เป็นสาธารณะ
+> การเผยแพร่รหัสผ่านที่ใช้ล็อกอินระบบที่ออนไลน์อยู่เท่ากับเปิดให้ใครก็ได้เข้ามาแก้ข้อมูล
+> **ขอรหัสผ่านจากผู้พัฒนา** หรือรันในเครื่องตามทาง ข. แล้วตั้งรหัสเอง
+
+| เลขประจำตัว | บทบาท | เห็นอะไร |
+|---|---|---|
+| `9900000001` | sender · transporter · receiver | เปิดคำขอได้และเดินสถานะได้ |
+| `9900000002` | transporter | ภารกิจลำเลียงของตัวเอง |
+| `9900000003` | receiver · sender | ผู้ป่วยที่กำลังมาถึงหน่วย |
+| `9900000004` | monitor · commander | คิวคำขอ กระดานรถ และแดชบอร์ด |
+
+### ทาง ข · รันในเครื่อง — 5 นาที
+
+**ต้องมีก่อน** Node.js 20 ขึ้นไป (`node -v`) · git · บัญชี Supabase (free tier พอ)
 
 ```bash
+# 1. ติดตั้ง (~1 นาที)
 git clone https://github.com/Aim-suvamatha/Vibe_MedRelay.git
 cd Vibe_MedRelay
 npm install
+
+# 2. ตรวจว่าทุกอย่างทำงาน — ยังไม่ต้องมี Supabase ด้วยซ้ำ (~1 นาที)
+npm run test:unit    # สูตรคำนวณเวลา 11 ข้อ
+npm run db:test      # migration + seed + ทดสอบ 77 ข้อ บน PostgreSQL ในเครื่อง
 ```
 
-### 2. สร้างโปรเจกต์ Supabase
-
-1. เข้า https://supabase.com/dashboard แล้วกด **New project**
-2. ตั้งชื่อ `medrelay` เลือก region **Southeast Asia (Singapore)** เพื่อให้ latency ต่ำที่สุด
-3. ตั้งรหัสผ่านฐานข้อมูลและ **เก็บไว้ในที่ปลอดภัย** (จะไม่แสดงอีก)
-4. รอ provisioning ประมาณ 2 นาที
-
-### 3. ตั้งค่า Environment Variables
+`npm run db:test` รัน migration ทุกไฟล์และชุดทดสอบทั้งหมดบน **PGlite**
+(PostgreSQL ที่คอมไพล์เป็น WebAssembly รันในโปรเซส Node) — **ไม่ต้องมี Docker
+ไม่ต้องมี PostgreSQL และไม่ต้องต่อ Supabase** ถ้าได้ `77/77 PASS` แปลว่า schema
+RLS trigger และ constraint ทั้งหมดทำงานถูกต้อง เป็นวิธีตรวจงานที่เร็วที่สุดของโครงการนี้
 
 ```bash
+# 3. ต่อ Supabase ของตัวเอง (~3 นาที)
 cp .env.example .env.local
 ```
 
-เปิด `.env.local` แล้วใส่ค่าจริงจาก **Supabase Dashboard → Project Settings → API**
+สร้างโปรเจกต์ที่ https://supabase.com/dashboard (region **Southeast Asia (Singapore)**)
+แล้วใส่ค่าใน `.env.local` จาก **Settings → API Keys**
 
 | ตัวแปร | เอามาจากไหน | เปิดเผยได้ |
 |---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Project URL | ✅ |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `anon` `public` key | ✅ (RLS คุมอีกชั้น) |
-| `SUPABASE_SERVICE_ROLE_KEY` | `service_role` key | ❌ **server เท่านั้น** |
+| `NEXT_PUBLIC_SUPABASE_URL` | Settings → Data API → Project URL | ✅ |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Publishable key (`sb_publishable_...`) | ✅ RLS คุมอีกชั้น |
+| `SUPABASE_SERVICE_ROLE_KEY` | Secret key (`sb_secret_...`) | ❌ **server เท่านั้น** |
+| `DATABASE_PASSWORD` | รหัสผ่านที่ตั้งตอนสร้างโปรเจกต์ | ❌ ใช้รัน migration |
 
-> ⚠️ **`.env.local` ถูกกันไว้ใน `.gitignore` แล้ว ห้ามลบออกและห้าม commit เด็ดขาด**
-> ถ้าเผลอ push key ขึ้นไป ให้ **revoke key ทันที** แล้วค่อยลบ history — ดู [AI_RULES.md §5.1](./AI_RULES.md)
-
-### 4. สร้างฐานข้อมูล
-
-เปิด **Supabase Dashboard → SQL Editor** แล้วรันไฟล์ใน [supabase/migrations/](./supabase/migrations/) **ตามลำดับเลขหน้าไฟล์** เท่านั้น
-
-```
-0001 enums → 0002 unit → 0003 profile → 0004 vehicle → 0005 case
-→ 0006 transfer_leg → 0007 assessment → 0008 event_log
-→ 0009 functions/triggers → 0010 RLS + policies → 0011 views
-```
-
-จากนั้นใส่ข้อมูลจำลอง `supabase/seed.sql` → `supabase/seed_profiles.sql` → `supabase/seed_demo_cases.sql`
-รายละเอียดแต่ละไฟล์และสิ่งที่ต้องเตรียมก่อน → [supabase/README.md](./supabase/README.md)
-
-หรือถ้าใช้ Supabase CLI
+> ⚠️ **ใช้แท็บ “Publishable and secret API keys” ไม่ใช่ “Legacy”**
+> legacy key (`eyJhbGciOi...`) ถ้าหลุดต้องสร้าง JWT secret ใหม่ทั้งโปรเจกต์ key อื่นพังตามหมด
+> ส่วน key แบบใหม่ rotate เฉพาะใบที่หลุดได้ — เหตุผลเต็มอยู่ใน [.env.example](./.env.example)
 
 ```bash
-npx supabase link --project-ref <your-project-ref>
-npx supabase db push
-```
+# 4. สร้างฐานข้อมูลและใส่ข้อมูลจำลอง
+for f in supabase/migrations/*.sql; do node supabase/scripts/sql.mjs "$f"; done
+node supabase/scripts/sql.mjs supabase/seed.sql
+node supabase/scripts/sql.mjs supabase/seed_profiles.sql
+node supabase/scripts/sql.mjs supabase/seed_demo_cases.sql
+node supabase/scripts/sql.mjs supabase/seed_pickup_points.sql
 
-**ตรวจว่า RLS เปิดครบทุกตาราง** — รันคำสั่งนี้ ต้องไม่มีแถวไหนเป็น `false`
+# 5. ตั้งรหัสผ่านบัญชีทดสอบ (สคริปต์ถามรหัสเอง ไม่แสดงบนจอ)
+node supabase/scripts/set-demo-passwords.mjs --dry-run   # ดูก่อนว่าจะแตะบัญชีไหน
+node supabase/scripts/set-demo-passwords.mjs
 
-```sql
-select tablename, rowsecurity
-from pg_tables
-where schemaname = 'public'
-order by tablename;
-```
-
-**แล้วรันชุดทดสอบ RLS** — [supabase/tests/rls_test.sql](./supabase/tests/rls_test.sql)
-ทั้งไฟล์อยู่ใน transaction ที่ปิดท้ายด้วย `rollback` จึงไม่ทิ้งอะไรไว้
-ผลต้องเป็น `PASS` ทุกข้อ **ถ้ามี `FAIL` ห้าม deploy**
-
-### 5. รันระบบ
-
-```bash
+# 6. รัน
 npm run dev
 ```
 
-เปิด http://localhost:3000
+เปิด http://localhost:3000 แล้วล็อกอินด้วยเลขประจำตัวในตารางข้างบน
 
-### 6. Deploy ขึ้น Vercel
+<details>
+<summary><b>ถ้าติดปัญหา</b></summary>
 
-1. เข้า https://vercel.com/new แล้ว import repository นี้
-2. ใส่ Environment Variables ทั้งหมดจาก `.env.local` ในหน้า **Settings → Environment Variables**
-3. กด Deploy — ทุก push เข้า `main` จะ deploy อัตโนมัติ และทุก branch จะได้ preview URL สำหรับส่งให้ผู้ทดสอบ
+| อาการ | สาเหตุและวิธีแก้ |
+|---|---|
+| `command not found: node` ในสคริปต์อัตโนมัติ | Node ติดตั้งผ่าน nvm ซึ่งโหลดจาก `~/.zshrc` · สั่ง `export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"` ก่อน |
+| `npm run typecheck` ฟ้อง `LayoutProps` | Next.js 16 สร้าง type นี้ตอน build · รัน `npm run build` หนึ่งครั้งก่อน |
+| build ค้างที่ error ของไฟล์ที่ลบไปแล้ว | ลบ cache ด้วย `rm -rf .next` แล้ว build ใหม่ |
+| หน้าเว็บว่างเปล่าโดยไม่มี error | มักเป็น session หมดอายุ ทำให้ RLS ปฏิเสธทุก query · ล็อกอินใหม่ |
+| `sql.mjs` ต่อฐานข้อมูลไม่ได้ | ยังไม่ได้ใส่ `DATABASE_PASSWORD` ใน `.env.local` |
+
+รายการเต็ม 13 ข้อพร้อมเหตุผล → [HANDOFF.md §5](./HANDOFF.md)
+</details>
+
+---
+
+## เดินดูระบบใน 3 นาที
+
+ลำดับนี้เล่าเรื่องได้ครบตั้งแต่ต้นทางถึงปลายทาง **ทุกหน้าเข้าถึงได้จากแถบล่าง ไม่ต้องพิมพ์ URL เอง**
+
+| # | ล็อกอินเป็น | ไปที่ | ทำอะไร | จุดที่ควรสังเกต |
+|---|---|---|---|---|
+| 1 | `9900000001` | **Sender** | กรอกอาการ เลือกความเร่งด่วนและปลายทาง ใส่สัญญาณชีพ แล้วกดส่ง | **ประเมินแรกรับครั้งเดียว** จำตัวเลขไว้ |
+| 2 | — | ระบบพาไป **ติดตามสถานะ** เอง | ดูเส้นเวลา 6 ขั้น | ขั้นที่ยังไม่ถึงเป็นจุดกลวง ไม่ใช่แค่สีจาง |
+| 3 | `9900000004` | **Monitor** | เห็นคำขอในคิว "รอจัดรถ" กดการ์ด แล้วกด **จัดรถ** | เลือกทั้งรถและผู้ลำเลียง · **ไม่มีช่องกรอกเวลา** |
+| 4 | `9900000002` | **Transporter** | เห็นภารกิจของตัวเอง กดเข้าไปเดินสถานะ 3 ขั้น | ปุ่มโผล่**ทีละขั้น** ข้ามขั้นไม่ได้เพราะฐานข้อมูลปฏิเสธ |
+| 5 | `9900000003` | **Receiver** | เห็นผู้ป่วยที่กำลังมาถึง **ก่อนรถจอด** | ★ **หัวใจของโครงการ** — เห็นสัญญาณชีพชุดเดียวกับข้อ 1 โดยไม่มีใครกรอกซ้ำ |
+| 6 | `9900000003` | ในหน้าเดียวกัน | กด **ส่งมอบผู้ป่วย** พร้อมติ๊กรายการตรวจ | ข้อมูลชุดเดิมตามไปทอดถัดไปได้โดยไม่ต้องกรอกใหม่ |
+| 7 | `9900000004` | **Monitor → แดชบอร์ด** | ดูมัธยฐานเวลาต่างๆ | **ไม่มีใครพิมพ์รายงาน** ตัวเลขคำนวณจากเวลาที่เพิ่งกดไป |
+
+สคริปต์นำเสนอฉบับเต็มพร้อมบทพูด → [docs/demo-script.md](./docs/demo-script.md)
 
 ---
 
 ## คำสั่งที่ใช้บ่อย
 
 ```bash
-npm run dev          # รัน development server
+npm run dev          # development server
 npm run build        # build production (ต้องผ่านก่อน push)
 npm run lint         # ตรวจ lint
-npm run typecheck    # ตรวจ TypeScript
+npm run typecheck    # ตรวจ TypeScript (รัน build หนึ่งครั้งก่อน)
 
-# generate type จาก schema จริงใน Supabase
-npx supabase gen types typescript --project-id <ref> > src/types/database.ts
+npm run test:unit    # สูตรคำนวณเวลาและมัธยฐาน 11 ข้อ
+npm run db:test      # migration + seed + ทดสอบ 77 ข้อ บน PGlite ในเครื่อง
 ```
+
+**ตรวจบนฐานข้อมูลจริงก่อน deploy ทุกครั้ง** — ทุกไฟล์อยู่ใน transaction ที่ปิดท้ายด้วย
+`rollback` จึงไม่ทิ้งอะไรไว้ ต้องได้ `PASS` ทุกข้อ **ถ้ามี `FAIL` ห้าม deploy**
+
+```bash
+node supabase/scripts/sql.mjs --no-tx supabase/tests/rls_test.sql         # 11 ข้อ ความปลอดภัย
+node supabase/scripts/sql.mjs --no-tx supabase/tests/form_test.sql        # 36 ข้อ schema
+node supabase/scripts/sql.mjs --no-tx supabase/tests/track_flow_test.sql  # 16 ข้อ วงจรการส่งกลับ
+```
+
+**แก้ schema เมื่อไร ต้อง generate type ใหม่ทุกครั้ง**
+
+```bash
+node supabase/scripts/gen-types.mjs   # ถาม Personal Access Token เอง ไม่แสดงบนจอ
+```
+
+> ⚠️ **อย่าใช้ `npx supabase gen types --db-url`** — คำสั่งนั้นต้องใช้ Docker ทุกเวอร์ชัน
+> สคริปต์ข้างบนเรียก Management API ซึ่งเป็น endpoint เดียวกันแต่ไม่แตะ Docker เลย
+
+---
+
+## Deploy ขึ้น Vercel
+
+```bash
+npx vercel --prod
+```
+
+หรือ import repository ที่ https://vercel.com/new แล้วใส่ environment variables
+
+> 🔴 **env var ทุกตัวต้องเป็นชนิด `Config` ห้ามเป็น `Secret`**
+> Next.js 16 + Turbopack ฝังค่า `process.env.*` ลงบันเดิลตั้งแต่ตอน **build**
+> ค่าที่ build อ่านไม่ได้จะกลายเป็น `undefined` ตอนรัน **ไม่ว่าจะมี `NEXT_PUBLIC_` นำหน้าหรือไม่**
+> อาการคือ Internal Server Error ทั้งที่หน้า Dashboard แสดงว่าตั้งค่าครบแล้ว
+>
+> `vercel env add` ตั้งเป็น `Secret` ให้เองอัตโนมัติ **ต้องใส่ `--no-sensitive` ทุกครั้ง**
+> ตรวจด้วย `vercel env ls | grep Secret` — ทุกบรรทัดที่เจอคือระเบิดเวลา
+>
+> **แก้ค่า env แล้วต้อง deploy ใหม่เสมอ** เพราะค่าถูกฝังตอน build
 
 ---
 
@@ -192,7 +267,7 @@ npx supabase gen types typescript --project-id <ref> > src/types/database.ts
 
 | เส้นตาย | สิ่งที่ต้องส่ง |
 |---|---|
-| **13 ก.ย. 2569** | Working Prototype + Git repository + เอกสาร |
+| **13 ก.ย. 2569** | Working Prototype + Git repository + เอกสาร — ✅ ระบบใช้งานได้แล้วที่ live URL |
 | **1 ต.ค. 2569** | ประกาศ 10 ผลงานที่ได้นำเสนอ |
 | **25 พ.ย. 2569** | Testing & QA + Innovation Pitch |
 
