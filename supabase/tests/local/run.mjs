@@ -78,6 +78,7 @@ function report(results, title) {
 report(await run('rls_test.sql', read(join(SUPA, 'tests/rls_test.sql')), true), 'rls_test.sql')
 report(await run('trigger_test.sql', read(join(SUPA, 'tests/trigger_test.sql')), true), 'trigger_test.sql')
 report(await run('form_test.sql', read(join(SUPA, 'tests/form_test.sql')), true), 'form_test.sql')
+report(await run('track_flow_test.sql', read(join(SUPA, 'tests/track_flow_test.sql')), true), 'track_flow_test.sql')
 
 console.log(failed ? `\n🛑 มี ${failed} ข้อไม่ผ่าน` : '\n✅ ผ่านทั้งหมด')
 process.exit(failed ? 1 : 0)

@@ -25,7 +25,8 @@
 | 12 | `migrations/0012_form_enums.sql` | enum ที่ถอดจากแบบฟอร์มกระดาษ (ทบ.466-900 ถึง 904) |
 | 13 | `migrations/0013_form_fields.sql` | คอลัมน์จากแบบฟอร์ม + trigger เวลา + แก้ policy `case_update` |
 | 14 | `migrations/0014_treatment_property.sql` | ตาราง `treatment` และ `property_item` พร้อม RLS |
-| 15 | `migrations/0015_evac_request.sql` | ตาราง `pickup_point` + function `create_evac_request()` — **ยังไม่ได้รันบนของจริง** |
+| 15 | `migrations/0015_evac_request.sql` | ตาราง `pickup_point` + function `create_evac_request()` |
+| 16 | `migrations/0016_vehicle_status_sync.sql` | trigger จองรถเมื่อทอดถูกจัดรถ และคืนรถเมื่อทอดจบ |
 
 จากนั้นใส่ข้อมูลจำลอง
 
@@ -55,15 +56,16 @@ where schemaname = 'public'
 order by tablename;
 ```
 
-**2. รันชุดทดสอบ 2 ไฟล์**
+**2. รันชุดทดสอบ 4 ไฟล์**
 
 ```
-tests/rls_test.sql       → 11 ข้อ  ความปลอดภัย
-tests/trigger_test.sql   → 14 ข้อ  auto timestamp (F6)
-tests/form_test.sql      → 36 ข้อ  schema จากแบบฟอร์มกระดาษ (0012–0015)
+tests/rls_test.sql        → 11 ข้อ  ความปลอดภัย
+tests/trigger_test.sql    → 14 ข้อ  auto timestamp (F6)
+tests/form_test.sql       → 36 ข้อ  schema จากแบบฟอร์มกระดาษ (0012–0015)
+tests/track_flow_test.sql → 16 ข้อ  หน้าติดตามสถานะเดินครบวงจร (F3 · 0016)
 ```
 
-ทั้งสามไฟล์อยู่ใน transaction ที่ปิดท้ายด้วย `rollback` จึงไม่ทิ้งอะไรไว้
+ทั้งสี่ไฟล์อยู่ใน transaction ที่ปิดท้ายด้วย `rollback` จึงไม่ทิ้งอะไรไว้
 ผลออกมาเป็นตารางท้ายไฟล์พร้อมบรรทัดสรุป ต้องเป็น `PASS` ทุกแถว **ถ้ามี `FAIL` ห้าม deploy**
 
 `rls_test.sql`
@@ -92,6 +94,23 @@ tests/form_test.sql      → 36 ข้อ  schema จากแบบฟอร์
 > **ทำไมต้องมี `trigger_test.sql` แยก** — `seed_demo_cases.sql` ใส่ timestamp ลงไปตรงๆ
 > เพื่อให้แดชบอร์ดมีตัวเลขให้ดูตอนสาธิต จึงข้าม trigger ไปทั้งหมด
 > ข้อมูลใน seed ไม่ได้พิสูจน์ว่า F6 ทำงาน — ไฟล์นี้ต่างหากที่พิสูจน์
+
+`track_flow_test.sql` — เดินตามลำดับเดียวกับที่ Server Action ของหน้า `/track` ยิงจริง
+
+| Test | พิสูจน์อะไร |
+|---|---|
+| K1–K2 | sender เปิดคำขอได้ แต่จัดรถเองไม่ได้ (RLS ปฏิเสธ) |
+| K3–K4 | ศูนย์สั่งการจัดรถได้ · `dispatched_at` มาจาก trigger · เคสเลื่อนเป็น `active` |
+| K5 | ข้าม `dispatched → completed` ไม่ได้ แม้ผู้กดมีสิทธิ์เต็ม |
+| K6–K8 | ชุดลำเลียงเดินครบ 4 ขั้นถึงส่งมอบ · เวลาครบ 6 ค่าและเรียงถูกลำดับ · เก็บรายการตรวจ ทบ.466-903 |
+| K9 | เคสปิดเองเมื่อทอดสุดท้ายส่งมอบ |
+| K10–K11 | ผู้รับปลายทางเปิดทอดถัดไปได้ · ต้นทางทอดใหม่ = ปลายทางทอดเดิม · เคสกลับมา `active` |
+| K12–K13 | ทอดที่เสร็จเข้า `v_leg_metrics` โดยไม่มีค่าติดลบ · `event_log` บันทึกครบ |
+| K14–K16 | รถถูกจอง/คืนตามสถานะทอด **แม้ผู้กดไม่มีสิทธิ์แก้ตาราง `vehicle`** · ไม่ปลุกรถที่ซ่อมอยู่ |
+
+> **ข้อ K15 คือข้อที่ต้องไม่หายไป** — มันจับ bug ที่ UPDATE ถูก RLS ปฏิเสธแล้ว
+> "แก้ 0 แถว" เงียบๆ โดยไม่มี error ให้เห็น ทำให้รถค้างสถานะจนไม่มีรถให้จัดในรอบถัดไป
+> ต้องสวมบทบาทเป็น **คนที่ไม่มีสิทธิ์** เท่านั้นจึงจะเจอ
 
 ---
 
