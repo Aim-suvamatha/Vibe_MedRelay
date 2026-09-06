@@ -22,6 +22,10 @@
 | 9 | `migrations/0009_functions_triggers.sql` | auto timestamp + case_code |
 | 10 | `migrations/0010_rls.sql` | RLS + policy ทุกตาราง |
 | 11 | `migrations/0011_views.sql` | view สำหรับแดชบอร์ดและ export |
+| 12 | `migrations/0012_form_enums.sql` | enum ที่ถอดจากแบบฟอร์มกระดาษ (ทบ.466-900 ถึง 904) |
+| 13 | `migrations/0013_form_fields.sql` | คอลัมน์จากแบบฟอร์ม + trigger เวลา + แก้ policy `case_update` |
+| 14 | `migrations/0014_treatment_property.sql` | ตาราง `treatment` และ `property_item` พร้อม RLS |
+| 15 | `migrations/0015_evac_request.sql` | ตาราง `pickup_point` + function `create_evac_request()` — **ยังไม่ได้รันบนของจริง** |
 
 จากนั้นใส่ข้อมูลจำลอง
 
@@ -56,9 +60,10 @@ order by tablename;
 ```
 tests/rls_test.sql       → 11 ข้อ  ความปลอดภัย
 tests/trigger_test.sql   → 14 ข้อ  auto timestamp (F6)
+tests/form_test.sql      → 36 ข้อ  schema จากแบบฟอร์มกระดาษ (0012–0015)
 ```
 
-ทั้งสองไฟล์อยู่ใน transaction ที่ปิดท้ายด้วย `rollback` จึงไม่ทิ้งอะไรไว้
+ทั้งสามไฟล์อยู่ใน transaction ที่ปิดท้ายด้วย `rollback` จึงไม่ทิ้งอะไรไว้
 ผลออกมาเป็นตารางท้ายไฟล์พร้อมบรรทัดสรุป ต้องเป็น `PASS` ทุกแถว **ถ้ามี `FAIL` ห้าม deploy**
 
 `rls_test.sql`
@@ -123,12 +128,27 @@ node supabase/tests/local/run.mjs
 
 | สภาพแวดล้อม | ผล |
 |---|---|
-| **PGlite (PostgreSQL 18.3) ในเครื่อง** | ✅ migration 11 · seed 3 · test 25/25 PASS |
-| **Supabase จริง (PostgreSQL 17)** | ✅ migration 11 · seed 3 · `rls_test` 11/11 · `trigger_test` 14/14 PASS |
+| **PGlite (PostgreSQL 18.3) ในเครื่อง** | ✅ migration 15 · seed 4 · test 61/61 PASS |
+| **Supabase จริง (PostgreSQL 17)** | ✅ migration 14 · seed 3 · 53/53 PASS — **ยังไม่ได้รัน `0015`** |
 
-ตรวจเพิ่มบน Supabase จริงแล้วว่า
+⚠️ **`0015_evac_request.sql` และ `seed_pickup_points.sql` ยังอยู่แค่ในเครื่อง**
+ต้องเอาขึ้น Supabase จริงก่อนเริ่มเขียนหน้า `/sender` (ดู [HANDOFF.md §3](../HANDOFF.md))
+หลังรันแล้ว `form_test.sql` ต้องได้ 36/36 และต้อง generate type ใหม่
+
+ตรวจบน Supabase จริงแล้วว่า (ณ migration 0011)
 ตาราง 8 · เปิด RLS ครบทุกตาราง · policy 18 · enum 9 · view 3 ตั้ง `security_invoker=on` ครบ
 · trigger 7 ตัวชื่อตรงตาม migration · helper function ทั้ง 4 ตัวเป็น `SECURITY DEFINER`
+
+`0012`–`0014` รันบนโปรเจกต์จริงแล้วเมื่อ 6 ก.ย. 2569 ตัวเลขที่ควรได้คือ
+ตาราง 10 · policy 25 · enum 19 · trigger 8 · function 13 · คอลัมน์ 144
+
+`form_test.sql` ตรวจตัวเลขเหล่านี้ให้เองในข้อ S1–S8 — วางทั้งไฟล์ใน SQL Editor แล้วต้องได้ PASS ครบ 28 ข้อ
+**ยืนยันบน Supabase จริงแล้วเมื่อ 6 ก.ย. 2569 — 28/28 PASS**
+
+ข้อ **S5 และ S6** สำคัญที่สุด เพราะตรวจสิทธิ์ระดับคอลัมน์ของ `treatment`
+ซึ่ง PGlite พิสูจน์แทน Supabase จริงไม่ได้ (Supabase มี default privileges ของตัวเอง)
+ผลที่ได้คือ `revoke update ... from authenticated` + `grant update (tourniquet_off, released_by)`
+ทำงานบน Supabase เหมือนกับใน PGlite ทุกประการ
 
 ---
 
@@ -156,3 +176,9 @@ PGlite ไม่มี event trigger ตัวนี้ จึงจับปั
 - ข้อมูลใน `seed*.sql` ต้องเป็นข้อมูลสมมติทั้งหมด `is_synthetic = true` เสมอ
 - ห้าม commit ไฟล์ seed ที่มาจากข้อมูลจริงแม้จะถอดตัวระบุแล้ว — ตั้งชื่อ `seed-real-*.sql` ซึ่ง `.gitignore` กันไว้แล้ว
 - ทุกครั้งที่เพิ่มตารางใหม่ **ต้องเขียน RLS policy ในคอมมิตเดียวกัน** ตารางที่ลืมเปิด RLS คือตารางที่ใครก็อ่านได้ด้วย anon key
+- **ห้ามใช้ `INSERT ... RETURNING` กับตารางที่ policy SELECT เรียก `can_see_case()`**
+  จะได้ error `new row violates row-level security policy` ที่ชี้ผิดที่โดยสิ้นเชิง
+  เหตุผลเต็มอยู่ใน [HANDOFF.md §5 ข้อ 10](../HANDOFF.md) — กระทบ `.insert().select()` ของ supabase-js ด้วย
+- **`Report/` ห้าม commit** — เป็นเอกสารต้นฉบับที่มีรายงานกำลังพลบาดเจ็บของจริง
+  ใส่ไว้ใน `.gitignore` แล้ว แต่ควรย้ายออกไปเก็บนอก repo (ดู [HANDOFF.md §7](../HANDOFF.md))
+  แบบฟอร์มเปล่า (PDF ทบ.466-*) ไม่มีข้อมูลบุคคล แต่ถูก ignore ไปพร้อมทั้งโฟลเดอร์

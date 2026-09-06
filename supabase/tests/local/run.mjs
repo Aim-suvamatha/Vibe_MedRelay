@@ -53,6 +53,7 @@ await run('auth.users (แทนการกดสร้างใน Dashboard)'
   on conflict (email) do nothing;`)
 await run('seed_profiles.sql', read(join(SUPA, 'seed_profiles.sql')))
 await run('seed_demo_cases.sql', read(join(SUPA, 'seed_demo_cases.sql')))
+await run('seed_pickup_points.sql', read(join(SUPA, 'seed_pickup_points.sql')))
 
 if (failed) {
   console.log(`\n🛑 setup ล้ม ${failed} ไฟล์ — แก้ก่อนแล้วรันใหม่`)
@@ -76,6 +77,7 @@ function report(results, title) {
 
 report(await run('rls_test.sql', read(join(SUPA, 'tests/rls_test.sql')), true), 'rls_test.sql')
 report(await run('trigger_test.sql', read(join(SUPA, 'tests/trigger_test.sql')), true), 'trigger_test.sql')
+report(await run('form_test.sql', read(join(SUPA, 'tests/form_test.sql')), true), 'form_test.sql')
 
 console.log(failed ? `\n🛑 มี ${failed} ข้อไม่ผ่าน` : '\n✅ ผ่านทั้งหมด')
 process.exit(failed ? 1 : 0)
