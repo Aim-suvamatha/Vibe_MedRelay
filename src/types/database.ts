@@ -845,7 +845,9 @@ export type Database = {
           leg_count: number | null
           origin_unit_id: string | null
           precedence: Database["public"]["Enums"]["precedence_level"] | null
+          service_date: string | null
           status: Database["public"]["Enums"]["case_status"] | null
+          total_evacuation_sec: number | null
           total_evacuation_time: string | null
           triage: Database["public"]["Enums"]["triage_color"] | null
         }
@@ -882,14 +884,18 @@ export type Database = {
         Row: {
           case_id: string | null
           dispatch_to_scene: string | null
+          dispatch_to_scene_sec: number | null
           from_unit_id: string | null
           id: string | null
           leg_no: number | null
           leg_total: string | null
+          leg_total_sec: number | null
           precedence: Database["public"]["Enums"]["precedence_level"] | null
           request_to_dispatch: string | null
+          request_to_dispatch_sec: number | null
           role_level: Database["public"]["Enums"]["role_of_care"] | null
           scene_to_handover: string | null
+          scene_to_handover_sec: number | null
           service_date: string | null
           to_unit_id: string | null
           triage: Database["public"]["Enums"]["triage_color"] | null

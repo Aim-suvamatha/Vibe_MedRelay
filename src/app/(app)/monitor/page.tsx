@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { AppHeader, AppShell } from "@/components/medrelay/app-shell";
 import { LegSection } from "@/components/medrelay/leg-list";
 import { NoAccessNotice } from "@/components/medrelay/no-access";
@@ -80,6 +82,17 @@ export default async function Page() {
       />
       <AppShell width="wide">
         <div className="space-y-6">
+          {/* แดชบอร์ดไม่มี tab ของตัวเองใน bottom nav โดยเจตนา
+              NAV_TABS ออกแบบให้หนึ่ง tab ตรงกับหนึ่งบทบาทใน enum app_role
+              การเพิ่ม tab ที่ห้าจะทำลายกฎนั้น จึงเข้าจากที่นี่แทน
+              ป้ายของ tab Monitor เขียนว่า "ศูนย์สั่งการและแดชบอร์ด" อยู่แล้ว */}
+          <Link
+            href="/dashboard"
+            className="flex h-14 w-full items-center justify-center rounded-lg border border-border bg-card text-base font-semibold focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            ดูแดชบอร์ดตัวเลขการส่งกลับ
+          </Link>
+
           <LegSection
             title="รอจัดรถ"
             emptyText="ไม่มีคำขอค้างในคิว — ทุกคำขอได้รับการจัดรถแล้ว"
