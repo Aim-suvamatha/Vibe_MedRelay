@@ -955,7 +955,11 @@ export type Database = {
           p_transport_mode?: Database["public"]["Enums"]["transport_mode"]
           p_triage?: Database["public"]["Enums"]["triage_color"]
         }
-        Returns: { case_id: string; case_code: string; leg_id: string }[]
+        Returns: {
+          case_code: string
+          case_id: string
+          leg_id: string
+        }[]
       }
       current_roles: {
         Args: never
