@@ -1,26 +1,193 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
+
+/* =============================================================
+   MedRelay design tokens
+   อ้างอิง WireframeV3 + ข้อกำหนด UI ใน docs/CLAUDE-PROMPTS.md (Prompt 02)
+
+   ทุกค่าสีในไฟล์นี้ตรวจด้วยสูตร contrast ของ WCAG 2.1 แล้ว ไม่ได้กะด้วยตา
+   เกณฑ์ที่ใช้
+     - ตัวอักษรบนพื้นสี      ≥ 4.5:1  (AA ข้อความปกติ)
+     - ขอบและไอคอน           ≥ 3.0:1  (AA องค์ประกอบที่ไม่ใช่ข้อความ)
+     - สี triage คู่ที่ติดกัน ≥ 1.6:1  (เกณฑ์ของโครงการเอง — ให้แยกออกในภาพขาวดำ)
+
+   ค่าความสว่างของสเกล triage ไล่จากมืดไปสว่าง
+     ดำ L=0.009 · แดง L=0.092 · เขียว L=0.181 · เหลือง L=0.434
+   จึงแยกออกได้แม้พิมพ์ขาวดำหรือผู้ใช้ตาบอดสี และยังมีรูปทรงกับตัวอักษรกำกับซ้ำอีกชั้น
+   ============================================================= */
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-heading: var(--font-sans);
+
+  /* สเกล triage — สีเดียวกันนี้ใช้กับ precedence ด้วย (ดู src/lib/triage.ts) */
+  --color-triage-black: var(--triage-black);
+  --color-triage-black-fg: var(--triage-black-fg);
+  --color-triage-red: var(--triage-red);
+  --color-triage-red-fg: var(--triage-red-fg);
+  --color-triage-yellow: var(--triage-yellow);
+  --color-triage-yellow-fg: var(--triage-yellow-fg);
+  --color-triage-yellow-edge: var(--triage-yellow-edge);
+  --color-triage-green: var(--triage-green);
+  --color-triage-green-fg: var(--triage-green-fg);
+
+  /* แถบหัวเรื่องสีเขียวเข้มตาม wireframe */
+  --color-header: var(--header);
+  --color-header-foreground: var(--header-foreground);
+  --color-header-muted: var(--header-muted);
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* ตั้งใจไม่สร้าง spacing token ชื่อ touch/touch-lg ไว้ที่นี่
+     เพราะ `h-touch` เป็นชื่อที่ตัวรวม class (แพ็กเกจ cn) ไม่รู้จัก
+     มันจึงไม่ตัด `h-8` ที่ติดมากับปุ่มของ shadcn ทิ้ง แล้วปล่อยออกมาทั้งคู่
+     ผลลัพธ์จะไปขึ้นกับลำดับ class ในไฟล์ CSS ที่ Tailwind สร้าง ซึ่งเป็นเรื่องบังเอิญ
+     วันที่ลำดับสลับ ปุ่มหลักจะหดจาก 56px เหลือ 32px เงียบๆ โดยไม่มี error เตือน
+
+     ขนาดพื้นที่กดขั้นต่ำจึงใช้คลาสมาตรฐานของ Tailwind ที่ตัดกันได้ถูกต้อง
+       h-12  = 3rem   = 48px  ปุ่มรองและช่องกรอก
+       h-14  = 3.5rem = 56px  ปุ่มยืนยันหลักของหน้า
+     ทั้งสองค่าคือเกณฑ์ "กดได้ด้วยนิ้วโป้งขณะสวมถุงมือ" ห้ามใช้ต่ำกว่านี้กับปุ่มที่ต้องกดในสนาม */
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --radius: 0.875rem;
+
+  /* พื้นหลังครีม ไม่ใช่ขาวสนิท — ลดแสงสะท้อนกลางแดดและทำให้การ์ดสีขาวเด่นขึ้น */
+  --background: #f4f1eb;
+  --foreground: #181c19;
+  --card: #ffffff;
+  --card-foreground: #181c19;
+  --popover: #ffffff;
+  --popover-foreground: #181c19;
+
+  /* เขียวปฏิบัติการ — ปุ่มยืนยันหลักทุกหน้าใน wireframe */
+  --primary: #146b41;
+  --primary-foreground: #ffffff;
+
+  --secondary: #e8e4db;
+  --secondary-foreground: #232823;
+  --muted: #ece8e0;
+  --muted-foreground: #55605a;
+  --accent: #e3ede5;
+  --accent-foreground: #10281c;
+
+  --destructive: #a81c18;
+  --border: #ddd8cd;
+  --input: #cdc7ba;
+  --ring: #146b41;
+
+  --header: #10281c;
+  --header-foreground: #ffffff;
+  --header-muted: #c6d3c9;
+
+  /* ---- สเกล triage ---- */
+  --triage-black: #16181a;
+  --triage-black-fg: #ffffff;
+  --triage-red: #a81c18;
+  --triage-red-fg: #ffffff;
+  --triage-green: #168838;
+  --triage-green-fg: #ffffff;
+  /* เหลืองเป็นสีเดียวที่ต้องใช้ตัวอักษรสีเข้ม ตัวอักษรสีขาวบนพื้นเหลืองได้แค่ 2.2:1 — ตกเกณฑ์ */
+  --triage-yellow: #e8a317;
+  --triage-yellow-fg: #231a00;
+  /* พื้นเหลืองต่างจากการ์ดสีขาวแค่ 2.2:1 จึงต้องมีขอบเข้มช่วยให้เห็นขอบเขต */
+  --triage-yellow-edge: #8a5d00;
+
+  --chart-1: #146b41;
+  --chart-2: #e8a317;
+  --chart-3: #a81c18;
+  --chart-4: #55605a;
+  --chart-5: #10281c;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #181c19;
+  --sidebar-primary: #146b41;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e3ede5;
+  --sidebar-accent-foreground: #10281c;
+  --sidebar-border: #ddd8cd;
+  --sidebar-ring: #146b41;
+}
+
+/* ไม่มี dark theme โดยเจตนา
+   ผู้ใช้หลักทำงานกลางแดด พื้นสว่างอ่านง่ายกว่าพื้นมืดในสภาพแสงจ้า
+   ถ้าจะเพิ่มโหมดกลางคืนสำหรับปฏิบัติการกลางคืน ให้ทำเป็นโหมดสีแดงแยกต่างหาก ไม่ใช่ dark mode ทั่วไป */
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    /* กัน iOS ขยายตัวอักษรเองตอนหมุนจอ */
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground;
+    /* ตัวอักษรไทยที่ 16px ขึ้นไปกันไม่ให้ iOS zoom ตอนโฟกัสช่องกรอก */
+    font-size: 1rem;
+    line-height: 1.65;
+  }
+  /* ทุกอย่างที่กดได้ต้องมีขอบโฟกัสที่มองเห็น — ห้ามพึ่ง hover อย่างเดียวเพราะเป็น touch device */
+  :where(a, button, [role="button"], input, select, textarea):focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+  /* ปิดไฮไลต์สีฟ้าของ tap บน mobile Safari/Chrome */
+  :where(a, button, [role="button"]) {
+    -webkit-tap-highlight-color: transparent;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  /* เว้นที่ให้แถบ home indicator ของ iPhone ไม่ทับ bottom nav */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  /* ตัวเลขความกว้างเท่ากัน — เวลาและสัญญาณชีพจะไม่กระตุกตอนอัปเดต */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
 }
