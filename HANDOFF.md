@@ -1,7 +1,7 @@
 # HANDOFF.md — สถานะโครงการและวิธีทำงานต่อ
 
-> **อัปเดตล่าสุด 5 ก.ย. 2569** · เขียนไว้ให้ session ถัดไป (ไม่ว่าจะเป็นคนหรือ AI) อ่านก่อนเริ่มงาน
-> เส้นตายส่ง Working Prototype **13 ก.ย. 2569 — เหลือ 8 วัน**
+> **อัปเดตล่าสุด 6 ก.ย. 2569** · เขียนไว้ให้ session ถัดไป (ไม่ว่าจะเป็นคนหรือ AI) อ่านก่อนเริ่มงาน
+> เส้นตายส่ง Working Prototype **13 ก.ย. 2569 — เหลือ 7 วัน**
 
 ---
 
@@ -17,32 +17,187 @@
 
 ---
 
-## 2. เสร็จแล้ว — Prompt 01, 03, 04, 05
+## 2. เสร็จแล้ว — Prompt 01–07 ครบ
 
 ### โครงการ Next.js
 Next.js 16.3.4 (App Router, Turbopack) · React 19.2.8 · Tailwind 4 · TypeScript
-dependency: `@supabase/supabase-js` `@supabase/ssr` `zod` `date-fns`
+dependency: `@supabase/supabase-js` `@supabase/ssr` `zod` `date-fns` · shadcn/ui (style `radix-nova`)
 `npm run build` · `npm run typecheck` · `npm run lint` **ผ่านทั้งหมด**
 
 ตรวจแล้วด้วยว่า `grep -r 'sb_secret_' .next/static` **ไม่พบ** — secret key ไม่หลุดลง bundle ที่ส่งให้ browser
 
-### ฐานข้อมูลบน Supabase — ใช้งานได้จริงแล้ว
-migration `0001`–`0011` รันบนโปรเจกต์จริงเรียบร้อย พร้อมข้อมูลจำลอง
+### Design system (Prompt 02)
 
-| | |
+เปิดดูของจริงได้ที่ **`/design`** — หน้ารวม component ทั้งหมดไว้ตรวจด้วยตาในที่เดียว
+
+| ไฟล์ | หน้าที่ |
 |---|---|
-| ตาราง | 8 · เปิด RLS ครบทุกตาราง |
-| คอลัมน์ | 91 |
-| policy | 18 · `assessment` และ `event_log` ไม่มี policy UPDATE/DELETE โดยเจตนา |
-| enum / view / trigger / function | 9 / 3 / 7 / 12 |
-| PostgreSQL | 17 (รองรับ `security_invoker`) |
-| ข้อมูลจำลอง | หน่วย 6 · รถ 5 · ผู้ใช้ 4 · เคส 11 (completed 9 · active 1 · requested 1) |
+| `src/app/globals.css` | design token ทั้งหมด · จานสีตรวจด้วยสูตร WCAG แล้ว |
+| `src/lib/enums.ts` | union type ของ enum ใน `0001_enums.sql` (ไม่ใช่ type ของตาราง) |
+| `src/lib/triage.ts` | สเกลสีเดียวของทั้งระบบ + การแปลง precedence → สี triage |
+| `src/lib/nav.ts` | นิยาม 4 tab และ `visibleTabs()` |
+| `src/components/medrelay/triage-dot.tsx` | `TriageDot` · `TriageChip` |
+| `src/components/medrelay/precedence-badge.tsx` | `PrecedenceBadge` |
+| `src/components/medrelay/relative-time.tsx` | `RelativeTime` · `formatElapsed` · `formatAgo` |
+| `src/components/medrelay/bottom-nav.tsx` | `BottomNav` |
+| `src/components/medrelay/app-shell.tsx` | `AppShell` · `AppHeader` |
 
-**ผลทดสอบบน Supabase จริง — `rls_test.sql` 11/11 · `trigger_test.sql` 14/14 PASS**
+**การตัดสินใจ 3 ข้อที่เจ้าของโครงการชี้ขาดไว้ (5 ก.ย. 2569)**
 
-### auth user ทดสอบ 4 บัญชี (สร้างแล้ว ไม่ได้ตั้งรหัสผ่าน)
+1. **bottom nav ใช้ชื่อบทบาทเป็นป้าย** — Sender / Transporter / Receiver / Monitor ตาม wireframe
+   ตรงกับ enum `app_role` หนึ่งต่อหนึ่ง · คำอธิบายไทยอยู่ใน `aria-label` และ `title`
+2. **ใช้ภาษาสีชุดเดียวทั้งระบบ** — precedence แปลงเป็นสี triage
+   `urgent → แดง · priority → เหลือง · routine → เขียว` ส่วนดำ (เกินเยียวยา) มีเฉพาะฝั่ง triage
+   แยกสองค่านี้ออกจากกันด้วย **รูปทรง** ไม่ใช่สี — TriageDot เป็นรูปทรงเรขาคณิต PrecedenceBadge เป็นแคปซูลมีข้อความ
+3. **ยึด AI_RULES §3.1 เรื่องข้อมูลผู้ป่วย** — ใช้ `case_code` + `patient_alias` เท่านั้น
+   ไม่ทำช่องชื่อจริง หมู่เลือด แพ้ยา หรือเลขอาวุธ ที่ wireframe 02–05 วาดไว้
+
+**จานสี — ตรวจแล้ว ไม่ได้กะด้วยตา**
+
+| | สีพื้น | ตัวอักษร | contrast | ความสว่าง |
+|---|---|---|---|---|
+| ดำ | `#16181a` | ขาว | 17.8 | 0.009 |
+| แดง | `#a81c18` | ขาว | 7.38 | 0.092 |
+| เขียว | `#168838` | ขาว | 4.55 | 0.181 |
+| เหลือง | `#e8a317` | `#231a00` | 7.94 | 0.434 |
+
+เหลืองเป็นสีเดียวที่ต้องใช้ **ตัวอักษรสีเข้ม** — ตัวอักษรขาวบนพื้นเหลืองได้แค่ 2.2:1 ตกเกณฑ์ AA
+และพื้นเหลืองต่างจากการ์ดสีขาวแค่ 2.2:1 จึงต้องมีขอบ `#8a5d00` กำกับเสมอ **อย่าถอดขอบออก**
+
+คู่สีที่ติดกันในสเกลห่างกันอย่างน้อย 1.63:1 จึงยังแยกออกในภาพขาวดำ
+และยังมีรูปทรงกับตัวอักษรกำกับซ้ำอีกสองชั้น — `/design` หัวข้อ 6 บังคับให้เป็นเฉดเทาไว้ทดสอบ
+
+**ไม่มี dark mode โดยเจตนา** ผู้ใช้ทำงานกลางแดด พื้นสว่างอ่านง่ายกว่า
+ถ้าจะทำโหมดกลางคืน ให้ทำเป็นโหมดสีแดงแยก ไม่ใช่ dark mode ทั่วไป
+
+**ตัวอักษร** IBM Plex Sans Thai (400/500/600/700) + IBM Plex Mono สำหรับ `case_code` สัญญาณชีพ เวลา และพิกัด
+
+### Authentication (Prompt 06)
+
+| ไฟล์ | หน้าที่ |
+|---|---|
+| `src/proxy.ts` | ต่ออายุ session + กันคนที่ยังไม่ล็อกอิน |
+| `src/app/(auth)/login/actions.ts` | Server Action `login` และ `logout` |
+| `src/app/(auth)/login/login-form.tsx` | ฟอร์ม (client) |
+| `src/lib/auth/rate-limit.ts` | ตัวนับกันไล่เดาเลขทหาร |
+| `src/lib/auth/profile.ts` | `getProfile()` ฝั่ง server ห่อด้วย `cache()` |
+| `src/hooks/use-profile.ts` | `useProfile()` · `useHasRole()` |
+| `src/components/medrelay/role-gate.tsx` | `RoleGate` |
+| `src/app/(app)/layout.tsx` | เช็ค profile + ProfileProvider + BottomNav |
+
+**⚠ Next.js 16 เปลี่ยนชื่อ `middleware.ts` เป็น `proxy.ts` แล้ว**
+export ต้องชื่อ `proxy` และตั้ง `runtime` เองไม่ได้ (จะ throw) — **ห้ามสร้าง `middleware.ts` ขึ้นมาใหม่**
+
+**ช่องทางล็อกอินตอนนี้คือรหัสผ่าน ไม่ใช่ OTP** (เจ้าของโครงการตัดสินใจ 6 ก.ย. 2569)
+โครงสร้างอื่นทำตามสเปค Prompt 06 ครบ — กรอกเลขทหาร 10 หลัก · แปลงเป็นบัญชีฝั่ง server
+· ข้อความผิดพลาดกลางๆ กัน enumerate · rate limit สองชั้น
+จะเปลี่ยนเป็น phone OTP ทีหลังก็แก้แค่บรรทัด `signInWithPassword` ใน `actions.ts`
+แต่ต้องต่อ SMS provider และเติม `profile.phone` ให้ครบก่อน
+
+**ทดสอบ login จริงผ่านครบแล้ว 6 ก.ย. 2569**
+- ล็อกอินสำเร็จด้วยเลขประจำตัวทหาร + รหัสผ่าน
+- `visibleTabs()` ซ่อน tab ถูกต้องตามบทบาทจริง (9900000001 เห็น 3 tab · 9900000004 เห็น Monitor อย่างเดียว)
+- กรอกเลขที่ไม่มีในระบบ ได้ข้อความเดียวกับกรอกรหัสผิดเป๊ะๆ — กัน enumerate ได้จริง
+
+รหัสผ่านของ 4 บัญชีตั้งด้วย `supabase/scripts/set-demo-passwords.mjs`
+ถ้าลืมรหัส ให้รันสคริปต์นั้นใหม่ ตั้งใหม่ได้ทันที
+
+**สองจุดที่กันไว้แล้ว อย่าถอดออก**
+- `safeNext()` ใน `actions.ts` กัน open redirect ที่พารามิเตอร์ `?next=`
+- เมื่อไม่พบเลขทหาร ยังต้องยิง `signInWithPassword` ด้วยอีเมลปลอม
+  ไม่งั้นผู้โจมตีจับเวลาตอบกลับแล้วแยกออกว่าเลขไหนมีอยู่จริง ทั้งที่ข้อความเหมือนกัน
+
+### ฐานข้อมูลบน Supabase
+
+migration `0001`–`0015` รันบนโปรเจกต์จริงเรียบร้อย (`0015` + seed จุดรับ รันเมื่อ 6 ก.ย. 2569)
+
+| | บน Supabase จริง | ในเครื่อง (PGlite) |
+|---|---|---|
+| migration | 0001–0015 | 0001–0015 |
+| ตาราง | 11 | 11 |
+| ผลทดสอบ | **36/36 PASS** (`form_test.sql`) | 11 + 14 + 36 = **61/61 PASS** |
+
+ของจริงกับในเครื่องตรงกันแล้ว ไม่มีส่วนต่างค้างอยู่
+
+ข้อมูลจำลอง หน่วย 6 · รถ 5 · ผู้ใช้ 4 · เคส 11 · PostgreSQL 17 (รองรับ `security_invoker`)
+`assessment` `treatment` `event_log` ไม่มี policy DELETE โดยเจตนา
+
+`form_test.sql` ข้อ S5/S6 ยืนยันแล้วว่าสิทธิ์ระดับคอลัมน์ของ `treatment` ทำงานบน Supabase จริง
+ไม่ใช่แค่บน PGlite — `authenticated` แก้ `dose` ไม่ได้ แต่ยังปิด `tourniquet_off` ได้
+
+### migration 0012–0014 — schema จากแบบฟอร์มกระดาษ (6 ก.ย. 2569)
+
+ถอดจากเอกสารต้นฉบับใน `supabase/Report/` — ทบ.466-900 ถึง 466-904 และ `field_casualty_db_schema.pdf`
+
+| ไฟล์ | เพิ่มอะไร |
+|---|---|
+| `0012_form_enums.sql` | enum 10 ตัว: `report_category` `rank_group` `case_outcome` `disposition_route` `avpu_level` `transport_mode` `patient_mobility` `security_status` `nbc_status` `tx_code` |
+| `0013_form_fields.sql` | คอลัมน์ใน `case` 22 ช่อง · `transfer_leg` 4 ช่อง · `assessment` 1 ช่อง · `unit` 2 ช่อง · trigger `case_form_timestamps` · แก้ policy `case_update` |
+| `0014_treatment_property.sql` | ตาราง `treatment` และ `property_item` พร้อม RLS ครบ |
+
+**สามจุดที่ต้องรู้ก่อนแก้ไฟล์เหล่านี้**
+
+1. **`treatment` แก้ไม่ได้ ยกเว้นเวลาคลายสายรัด** — กันสองชั้น
+   ชั้นแถวคือ policy `treatment_release` ชั้นคอลัมน์คือ `grant update (tourniquet_off, released_by)`
+   **ถ้าลบบรรทัด `revoke update ... from authenticated` ออก ผู้ใช้จะแก้ `dose` ของเวชระเบียนได้ทันที**
+   ข้อ I4 ใน `form_test.sql` จับเรื่องนี้โดยเฉพาะ
+2. **`property_item` แก้ได้โดยเจตนา** ต่างจาก `treatment` เพราะบัญชีสิ่งของไม่ใช่เวชระเบียน
+   นับผิดต้องแก้ให้ตรงของจริงได้ ไม่งั้นผู้ใช้จะเลี่ยงไปจดกระดาษ
+3. **`disposed_at` และ `approved_at` เขียนทับค่าจาก client เสมอ** ไม่ใช่แค่ตอนค่าเดิมเป็น null
+   เหตุผลเดียวกับ Prompt 04 ทั้งข้อ — ถ้า client ยัดเวลาได้ ตัวเลขบนแดชบอร์ดจะเชื่อไม่ได้
+
+**สิ่งที่ตั้งใจไม่ทำ**
+ตาราง `PERSONNEL` (ชื่อจริง หมู่เลือด แพ้ยา) — ขัด AI_RULES §3.1 โดยตรง
+ตาราง `DEATH_RECORD` (ทบ.466-904 ใบชันสูตรพลิกศพ) — เป็นเอกสารที่มีผลทางกฎหมาย
+ต้องผ่านนายทหารพระธรรมนูญก่อน เฟสนี้บันทึกแค่ `outcome = 'died'`
+
+### Prompt 07 — เสร็จแล้วทั้งฐานข้อมูลและ UI (6 ก.ย. 2569)
+
+| ไฟล์ | สถานะ |
+|---|---|
+| `migrations/0015_evac_request.sql` | ✅ รันบน Supabase จริงแล้ว |
+| `seed_pickup_points.sql` | ✅ รันแล้ว — จุดนัดรับจำลอง 8 จุด |
+| `tests/form_test.sql` หมวด L | ✅ 8 ข้อ · **36/36 PASS บนของจริง** |
+| `src/app/(app)/sender/schema.ts` | ✅ กติกา zod ใช้ร่วมกันทั้ง client และ server |
+| `src/app/(app)/sender/actions.ts` | ✅ Server Action ยิง RPC ครั้งเดียว |
+| `src/app/(app)/sender/sender-form.tsx` | ✅ ฟอร์ม 4 ก้อน เรียงตามลำดับที่ผู้ใช้คิดจริง |
+| `src/app/(app)/sender/page.tsx` | ✅ ดึงหน่วยปลายทางและจุดรับฝั่ง server |
+| `src/app/(app)/track/[caseId]/page.tsx` | ⚠️ **ฉบับย่อ** — มีไว้ให้ redirect หลังส่งไม่ตกหน้า 404 · F3 ตัวเต็มอยู่ใน Prompt 08 |
+
+**ตรวจจริงแล้วด้วย session ของ `demo.sender` บนฐานข้อมูลจริง** (สร้างเคสแล้วลบทิ้ง)
+
+- กดครั้งเดียวได้ `case` 1 + `transfer_leg` 1 (`pending`, `leg_no=1`) + `assessment` 1 (`initial`) ✅
+- `requested_at` ตั้งโดยฐานข้อมูล ไม่ใช่ client ✅ · `is_synthetic = true` ✅
+- `pickup_grid` คัดลอกจากจุดที่เลือก (`QA 000 000`) ไม่ได้มาจาก GPS ✅
+- ยิงซ้ำด้วย `client_uuid` เดิม → ถูกปฏิเสธด้วย `23505` ไม่เกิดเคสซ้ำ ✅
+- หน้า `/sender` เรนเดอร์ครบ และ **ไม่มี** `geolocation` · `h-touch` · ช่องชื่อจริง ในผลลัพธ์ ✅
+
+**สามจุดที่ต้องรู้ก่อนแก้หน้านี้**
+
+1. **กันส่งซ้ำด้วย `client_uuid` ไม่ใช่ด้วยการ disable ปุ่ม**
+   ฟอร์มสร้าง uuid ครั้งเดียวตอนเปิดหน้า แล้วคงค่าเดิมไว้แม้ submit ไม่ผ่าน
+   ตาราง `case` มี `UNIQUE (client_uuid)` เมื่อเจอ `23505` แปลว่า "ส่งไปแล้ว" ไม่ใช่ error
+   `actions.ts` จึงไปหาเคสเดิมแล้ว redirect ไปหน้านั้น — **อย่าเปลี่ยนเป็นแจ้ง error**
+2. **เวลาที่เริ่มมีอาการแปลงเป็น ISO ที่ browser ไม่ใช่ที่ server**
+   `datetime-local` ไม่มี timezone ติดมาด้วย ถ้าปล่อยให้ server แปลง
+   มันจะตีความด้วย timezone ของ server (UTC บน Vercel) แล้วเวลาเพี้ยนไป 7 ชั่วโมง
+3. **ใช้ `<select>` ธรรมดา ไม่ใช่ Select ของ shadcn**
+   Select ของ shadcn เป็น Radix ซึ่งไม่ส่งค่าเข้า FormData เอง ต้องมี hidden input คอยตาม
+   ในฟอร์มที่ใช้ Server Action ล้วนๆ การใช้ `<select>` จริงสั้นกว่าและพังยากกว่า
+
+`0015` มีสองอย่าง
+
+1. **ตาราง `pickup_point`** — จุดนัดรับที่กำหนดไว้ล่วงหน้า
+   สเปคข้อ 1 ของ Prompt 07 บอกว่า "เลือกจากรายการ ไม่ใช้ GPS" และ AI_RULES §3.1 ห้ามเก็บพิกัดเรียลไทม์
+   **อย่าต่อ Geolocation API เด็ดขาด** แม้ wireframe 01 จะเขียนว่า "บันทึกพิกัดอัตโนมัติแล้ว"
+2. **function `create_evac_request()`** — เปิด case + transfer_leg + assessment ในหนึ่ง statement
+   PostgREST ไม่มี API เปิด transaction คร่อมหลายคำขอ ถ้าให้เว็บยิง insert สามครั้งติดกัน
+   แล้วเน็ตหลุดหลังครั้งแรก จะเหลือเคสที่ไม่มีทอดค้างในระบบ
+   **เป็น `SECURITY INVOKER` ห้ามเปลี่ยนเป็น `DEFINER`** ไม่งั้นข้าม RLS ทั้งหมด (ข้อ L8 จับเรื่องนี้)
+
+### auth user ทดสอบ 4 บัญชี — ตั้งรหัสผ่านแล้ว ล็อกอินได้จริง
 `demo.sender@` · `demo.transporter@` · `demo.receiver@` · `demo.monitor@` — โดเมน `medrelay.invalid`
-ตั้งรหัสผ่านได้ที่ Dashboard → Authentication ถ้าต้องทดสอบ UI ด้วยมือ
+รหัสผ่านตั้งด้วย `supabase/scripts/set-demo-passwords.mjs` (ทั้ง 4 บัญชีใช้รหัสเดียวกัน)
 
 ---
 
@@ -50,20 +205,56 @@ migration `0001`–`0011` รันบนโปรเจกต์จริงเ
 
 | Prompt | งาน | ประมาณเวลา |
 |---|---|---|
-| **02** | Design system — bottom nav 4 tab, `PrecedenceBadge`, `TriageDot`, `RelativeTime` | 2 ชม. |
-| **06** | Authentication — login, middleware, `useProfile`, `RoleGate` | 3 ชม. |
-| **07** | F1 หน้าขอส่งกลับ (Sender) | 4 ชม. |
-| **08** | F2 ศูนย์สั่งการ + F3 ติดตามสถานะ | 6 ชม. |
+| **08** | F2 ศูนย์สั่งการ + F3 ติดตามสถานะ (ตัวเต็ม) | 6 ชม. |
 | **09** | F4 แดชบอร์ด + F7 export | 4 ชม. |
 | **10** | Deploy ขึ้น Vercel | 3 ชม. |
 
 **ยังไม่ได้ deploy ขึ้น Vercel เลย** — ยังไม่มี live URL
 
-### ลำดับที่แนะนำ
-เริ่ม **02 ก่อน** แล้วค่อย 06 — component พื้นฐานจะทำให้หน้า login เขียนง่ายขึ้น
+### 🚩 ขั้นแรกที่ต้องทำเมื่อเปิดงานต่อ
+
+**generate type ใหม่ให้เป็นของแท้**
+
+`src/types/database.ts` ตอนนี้ถูกต้องและ typecheck ผ่าน แต่ส่วนของ `0015`
+(`pickup_point` และ `create_evac_request`) **เขียนด้วยมือ** โดยเทียบกับ schema จริงทีละคอลัมน์
+เพราะ `gen types` ต้องใช้ Docker หรือ Personal Access Token ซึ่งตอนนั้นยังไม่มี
+
+```bash
+node supabase/scripts/gen-types.mjs      # ถาม token เอง ไม่แสดงบนจอ
+git diff --stat src/types/database.ts    # ต้องไม่มีอะไรเปลี่ยน ถ้าที่เขียนด้วยมือถูกต้อง
+npm run typecheck
+```
+
+ถ้า diff ออกมาไม่ว่าง แปลว่ามีจุดที่เขียนด้วยมือไม่ตรงกับของจริง — เชื่อไฟล์ที่ generate มา
+ต้องมี Personal Access Token (Dashboard → Account → Access Tokens · เลือก Read-only พอ)
+
+**แล้วค่อยเริ่ม Prompt 08** ตามสเปคใน `docs/CLAUDE-PROMPTS.md`
 ถ้าเวลาไม่พอ ให้ใช้ Prompt E3 ตัด **F3** ออกก่อนตามที่ [PROJECT.md §9](./PROJECT.md) วางแผนไว้
 
----
+### สิ่งที่ต้องรู้ก่อนเขียน Prompt 08
+
+- `/track/[caseId]` **มีอยู่แล้วแต่เป็นฉบับย่อ** — ต้องเติม timeline 6 timestamp ต่อทอด
+  ปุ่มเปลี่ยนสถานะของ transporter รายการ assessment ทุกทอด และปุ่ม "ส่งทอดถัดไป"
+- UI ต้องเดิน `status` ตามลำดับ ข้ามขั้นไม่ได้ — ดู §5 ข้อ 7
+- **ห้ามใช้ `.insert().select()`** กับ `case` `transfer_leg` `assessment` `treatment` `property_item` — ดู §5 ข้อ 10
+- component พร้อมใช้แล้ว: `TriageDot` `TriageChip` `PrecedenceBadge` `RelativeTime` `AppHeader` `AppShell` `RoleGate`
+- ปุ่มใหญ่ใช้ `h-14` (56px) ปุ่มรองและช่องกรอกใช้ `h-12` (48px) — **ห้ามสร้าง token ชื่อ `h-touch` ใหม่** (ดู §5 ข้อ 8)
+- ถ้าต้องมี `<select>` ให้ใช้ของ HTML จริง ไม่ใช่ Select ของ shadcn (เป็น Radix ไม่ส่งค่าเข้า FormData)
+
+### auth user ทดสอบ — ตั้งรหัสผ่านแล้ว ล็อกอินได้จริง
+
+```bash
+node supabase/scripts/set-demo-passwords.mjs --dry-run   # ดูก่อนว่าจะแตะบัญชีไหน
+node supabase/scripts/set-demo-passwords.mjs             # ตั้งจริง
+```
+สคริปต์ยอมแตะเฉพาะบัญชีโดเมน `@medrelay.invalid` เท่านั้น กันพลาดไปโดนผู้ใช้จริง
+
+**วิธีตรวจฐานข้อมูลจริงซ้ำเมื่อไรก็ได้** — ทั้งไฟล์อยู่ใน transaction ที่ปิดท้ายด้วย rollback
+จึงไม่แก้ข้อมูลจริง ต้องได้ 36/36
+
+```bash
+node supabase/scripts/sql.mjs --no-tx supabase/tests/form_test.sql
+```
 
 ## 4. เริ่มงานต่อ
 
@@ -71,14 +262,16 @@ migration `0001`–`0011` รันบนโปรเจกต์จริงเ
 cd ~/Desktop/Learning/MedExccme/Vibe_Project/Vibe_MedRelay
 npm install          # ถ้า node_modules หาย
 npm run dev          # http://localhost:3000
-npm run db:test      # รัน migration + seed + test ทั้งหมดบน PGlite ในเครื่อง (25 ข้อ)
+npm run db:test      # รัน migration + seed + test ทั้งหมดบน PGlite ในเครื่อง (61 ข้อ)
 ```
 
 `.env.local` ตั้งค่าครบแล้วและใช้งานได้ — **ห้าม commit และห้ามวางค่าลงในแชทกับ AI**
 
 ---
 
-## 5. ⚠️ เจ็ดข้อที่จะเสียเวลาถ้าไม่รู้ล่วงหน้า
+## 5. ⚠️ สิบเอ็ดข้อที่จะเสียเวลาถ้าไม่รู้ล่วงหน้า
+
+> ข้อ 10 เป็นข้อที่กินเวลามากที่สุด อ่านก่อนเขียน query ตัวแรก
 
 **1. `node` ไม่อยู่ใน PATH ของ shell แบบ non-interactive**
 Node v24.20.0 ติดตั้งผ่าน nvm ซึ่งโหลดจาก `~/.zshrc` สคริปต์อัตโนมัติจะมองไม่เห็น ใส่สองบรรทัดนี้ก่อน
@@ -98,13 +291,22 @@ export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"
 `npm run db:test` เร็วและจับ bug ได้เยอะ แต่ไม่มี `rls_auto_enable` และไม่มี Supabase Auth จริง
 **ต้องรัน `rls_test.sql` บนโปรเจกต์จริงอีกรอบก่อน deploy เสมอ**
 
-**5. ไม่มีทางเชื่อมต่อ database ตรงจากเครื่องนี้**
-ไม่มี `psql` ไม่มี Docker และไม่มีรหัสผ่าน database ใน `.env.local`
-วิธีที่ใช้ได้ผลคือส่ง SQL เข้าคลิปบอร์ดแล้วให้ผู้ใช้วางใน SQL Editor
+**5. ต่อ database ตรงได้แล้ว — ไม่ต้องวางใน SQL Editor อีก** (แก้เมื่อ 6 ก.ย. 2569)
+
+ยังไม่มี `psql` และไม่มี Docker แต่ `.env.local` มี `DATABASE_PASSWORD` อยู่
+จึงต่อผ่าน pooler ด้วย `pg` (devDependency) ได้เลย
+
 ```bash
-{ echo "begin;"; cat supabase/migrations/*.sql; echo "commit;"; } | pbcopy
+node supabase/scripts/sql.mjs supabase/migrations/0016_xxx.sql   # ห่อ begin/commit ให้เอง
+node supabase/scripts/sql.mjs --no-tx supabase/tests/form_test.sql  # ไฟล์ที่จัดการ transaction เอง
 ```
-PostgreSQL รองรับ transactional DDL ทั้งหมด ห่อด้วย `begin/commit` แล้วถ้าพังจะ rollback ทั้งก้อน ไม่มีตารางครึ่งๆ ค้าง
+
+ค่าปริยายห่อทั้งไฟล์ด้วย `begin/commit` — PostgreSQL รองรับ transactional DDL
+ถ้าพังกลางทางจะ rollback ทั้งก้อน ไม่มีตารางครึ่งๆ ค้าง
+สคริปต์ต่อในฐานะ superuser `postgres` ซึ่ง **ข้ามทุก RLS policy** ใช้กับ migration และการตรวจสอบเท่านั้น
+ต้องใช้ session mode (พอร์ต 5432) ไม่ใช่ transaction mode (6543) เพราะ DDL ต้องอยู่ใน session เดียว
+
+วิธีเดิม (`pbcopy` แล้ววางใน SQL Editor) ยังใช้ได้ ถ้าอยากเห็นทุกคำสั่งก่อนรัน
 
 **6. ใช้ API key แบบใหม่ของ Supabase**
 `sb_publishable_...` และ `sb_secret_...` ไม่ใช่ legacy JWT (`eyJhbGciOi...`)
@@ -113,6 +315,72 @@ PostgreSQL รองรับ transactional DDL ทั้งหมด ห่อ�
 **7. UI ต้องเดิน `status` ตามลำดับ**
 constraint `leg_time_order` บังคับว่าขั้นถัดไปตั้งได้ต่อเมื่อขั้นก่อนหน้าถูกตั้งแล้ว
 **ข้าม `pending → completed` ไม่ได้** database จะปฏิเสธ — เป็นพฤติกรรมที่ตั้งใจ ไม่ใช่ bug
+
+**8. อย่าตั้งชื่อ spacing token เองแล้วเอาไปทับ class ของ shadcn**
+`--spacing-touch` จะสร้างคลาส `h-touch` ซึ่งแพ็กเกจ `cn` ไม่รู้จัก
+มันจึงไม่ตัด `h-8` ที่ติดมากับปุ่มทิ้ง แล้วปล่อยออกมาทั้งคู่
+ผลจะไปขึ้นกับลำดับใน CSS ที่ Tailwind สร้าง วันที่ลำดับสลับ ปุ่มจะหดจาก 56px เหลือ 32px เงียบๆ
+**ใช้ `h-12` (48px) กับ `h-14` (56px) เท่านั้น** เคยพลาดมาแล้วตอน Prompt 06
+(component ของ shadcn ทั้ง 10 ตัว import `cn` จาก `"cn"` ตรงๆ ไม่ผ่าน `@/lib/utils`
+การไปตั้งค่า `cn` ใน `utils.ts` จึงไม่ช่วยอะไร และ `npx shadcn add` ครั้งหน้าจะเขียนทับกลับด้วย)
+
+**9. `npm run build` ค้างที่ error ของไฟล์ที่ลบไปแล้ว**
+Next 16 สร้าง type validator ไว้ใน `.next/dev/types` ถ้าลบหรือย้ายไฟล์ route
+validator เก่าจะยังอ้างถึงไฟล์เดิมแล้ว build ล้ม แก้ด้วย `rm -rf .next` แล้ว build ใหม่
+
+**10. 🔴 `INSERT ... RETURNING` ใช้กับ `case` และ `transfer_leg` ไม่ได้**
+
+นี่คือกับดักที่ทำให้เสียเวลามากที่สุดในโครงการนี้ เพราะ error ชี้ผิดที่อย่างสิ้นเชิง
+
+```
+new row violates row-level security policy for table "case"
+```
+
+อ่านแล้วจะนึกว่า policy ฝั่ง INSERT ผิด **แต่ policy ไม่ได้ผิดอะไรเลย** สาเหตุจริงคือ
+
+`RETURNING` บังคับให้ Postgres เอา policy ฝั่ง **SELECT** มาตรวจแถวที่เพิ่งสร้างด้วย
+policy `case_select` เรียก `can_see_case()` ซึ่งประกาศเป็น `stable` และไปอ่านตาราง `case` เอง
+ฟังก์ชัน `stable` มองข้อมูลด้วย snapshot ณ ตอนเริ่มคำสั่ง
+จึง **มองไม่เห็นแถวที่คำสั่งเดียวกันนั้นเพิ่งสร้าง** แล้วตอบว่าไม่มีสิทธิ์
+
+**กระทบฝั่งเว็บโดยตรง** — `.insert().select()` ของ supabase-js คือ `INSERT ... RETURNING` เป๊ะๆ
+
+```ts
+// ❌ ล้มเสมอ
+await supabase.from("case").insert(row).select().single()
+
+// ✅ สร้าง id เองก่อน แล้วอ่านทีหลังเป็นคนละคำสั่ง
+const id = crypto.randomUUID()
+await supabase.from("case").insert({ id, ...row })
+await supabase.from("case").select("case_code").eq("id", id).single()
+```
+
+`create_evac_request()` ใน `0015` แก้ด้วยวิธีนี้แล้ว ดูคอมเมนต์ในไฟล์
+ตารางอื่นที่ policy SELECT เรียก `can_see_case()` ก็เจอปัญหาเดียวกัน —
+`case` · `transfer_leg` · `assessment` · `treatment` · `property_item`
+
+**อีกสองอย่างที่หลงทางง่ายในเรื่องเดียวกัน**
+- `returns table (…, case_code, …)` ทำให้ `case_code` เป็นชื่อตัวแปรของ plpgsql
+  เขียน `select case_code into …` จะได้ error `column reference is ambiguous`
+  ต้อง alias ตารางแล้วเขียน `c.case_code`
+- แต่ถ้าเลี่ยงด้วยการ qualify เต็มเป็น `public."case".case_code` Postgres จะตีความว่า
+  อ้างถึงทั้งตาราง แล้วเด้ง error RLS อันเดิมกลับมาอีก
+
+**11. `gen types --db-url` ต้องใช้ Docker ทุกเวอร์ชัน — ใช้ Personal Access Token แทน**
+
+ลองมาแล้วทั้ง CLI `1.226.4` · `2.48.3` · `2.116.0` · `latest` ทุกตัวตอบเหมือนกันว่า
+`Cannot connect to the Docker daemon` เพราะ `--db-url` ถูกย้ายไปรันใน container
+**การต่อฐานข้อมูลตรงได้ (ข้อ 5) ไม่ได้ทำให้ข้อนี้หายไป** — คนละเส้นทางกัน
+
+ใช้ `supabase/scripts/gen-types.mjs` แทน มันเรียก Management API ซึ่งเป็น endpoint เดียวกับ
+ที่ CLI ใช้ตอน `--project-id` และไม่แตะ Docker เลย สคริปต์ถาม token เองแบบไม่แสดงบนจอ
+
+```bash
+node supabase/scripts/gen-types.mjs
+```
+
+สคริปต์เช็คให้ด้วยว่า type ที่ได้มามี `pickup_point` และ `create_evac_request` จริง
+ถ้าไม่มีแปลว่ากำลังดึงจากโปรเจกต์ที่ยังไม่ได้รัน `0015`
 
 ---
 
@@ -127,18 +395,39 @@ constraint `leg_time_order` บังคับว่าขั้นถัดไ�
 
 ---
 
-## 7. ไฟล์ที่ยังไม่ได้ commit — ต้องให้เจ้าของโครงการตัดสินใจ
+## 7. 🔴 ไฟล์ที่มีข้อมูลจริง — ห้าม commit
 
-```
-WireframeV3/                            wireframe 5 หน้าจอ + field_casualty_db_schema.pdf
-Image 5-9-26 at 23.07.png               ภาพหน้าจอที่หลงเหลือ
-```
+ตรวจเมื่อ 6 ก.ย. 2569 ตอนศึกษาเอกสารใน `supabase/Report/`
 
-wireframe ทั้ง 5 ไฟล์ **มีประโยชน์มากสำหรับ Prompt 02 และ 07–09** เพราะเป็นแบบหน้าจอที่ออกแบบไว้แล้ว
-แต่ยังไม่ commit เพราะ **ยังไม่มีใครตรวจว่าไฟล์ PDF มีข้อมูลผู้ป่วยจริงหรือชื่อหน่วยจริงหรือไม่**
-ตาม [AI_RULES.md §5.2](./AI_RULES.md) ต้องตรวจไฟล์ข้อมูลดิบก่อน commit ทุกครั้ง
+| โฟลเดอร์ | พบอะไร |
+|---|---|
+| `supabase/Report/6_รายงานหน่วยเหนือ_*.jpg` | **เอกสารราชการที่มีข้อมูลกำลังพลจริงรายบุคคล และข้อมูลที่ตั้งหน่วย** — ตรวจแล้วเมื่อ 6 ก.ย. 2569 · รายละเอียดไม่บันทึกไว้ที่นี่โดยเจตนา เพราะ repo นี้เป็นสาธารณะ |
+| `WireframeV3/*.png` | ใช้ชื่อผู้บาดเจ็บ **จากรายงานชุดเดียวกัน** เป็นข้อมูลตัวอย่างในภาพ — ตอบคำถามที่ค้างไว้แล้วว่าไม่ใช่ชื่อสมมติ |
+| `Image 5-9-26 at 23.07.png` | ภาพหน้าจอที่ยังไม่ได้ตรวจ |
 
-**สิ่งที่ต้องทำ:** เปิดดูทั้ง 6 ไฟล์ → ถ้าสะอาด `git add WireframeV3/` → ถ้ามีข้อมูลจริง ย้ายออกนอก repo
+**สถานะ:** ทั้งสามรายการถูกใส่ใน `.gitignore` แล้ว และตรวจ `git log` ยืนยันว่า **ไม่เคยถูก commit เลย** ประวัติสะอาด
+
+**สิ่งที่ยังต้องทำ:** `.gitignore` เป็นแค่ตาข่ายกันพลาด ไม่ใช่ทางแก้
+ควรย้าย `supabase/Report/` และ `WireframeV3/` ออกไปเก็บนอก repo แล้วอ้างถึงด้วย path
+ตาม [AI_RULES.md §3.3](./AI_RULES.md) ข้อมูลจริงต้องผ่านการอนุมัติ 5 ข้อก่อนเข้าระบบ ซึ่งยังไม่มีสักข้อ
+
+ไฟล์ PDF แบบฟอร์ม (ทบ.466-900 ถึง 904) และ `field_casualty_db_schema.pdf` เป็นแบบฟอร์มเปล่า
+ไม่มีข้อมูลบุคคล ปลอดภัยที่จะ commit ถ้าต้องการ — แต่ตอนนี้ถูก ignore ไปพร้อมทั้งโฟลเดอร์
+
+### ไฟล์อื่นที่ยังไม่ได้ commit
+
+`AGENTS.md` กับ `CLAUDE.md` เกิดจาก Next.js 16 สร้างเอง ปิดได้ด้วย `agentRules: false` ใน `next.config.ts`
+
+### ช่องว่างระหว่าง wireframe กับ schema — ปิดแล้ว
+
+migration `0012`–`0014` เติมช่องที่ขาดครบแล้ว (ดู §2) เหลือจุดเดียวที่ตั้งใจไม่ทำคือ
+ช่องชื่อจริง หมู่เลือด แพ้ยา และประวัติโรคประจำตัวของผู้ป่วย ตาม [AI_RULES §3.1](./AI_RULES.md)
+**เวลาลอก layout จาก wireframe ให้ข้ามการ์ด "ผู้ป่วย personnel" ไป** ใช้ `case_code` + `patient_alias` แทน
+
+จุดที่ wireframe ทำผิดกฎอีกข้อ: หน้าที่ 1 แสดงข้อความว่าระบบบันทึกพิกัดของผู้ใช้อัตโนมัติ
+พร้อมพิกัดตัวอย่างที่เป็นตำแหน่งจริง (ไม่คัดลอกมาไว้ที่นี่)
+AI_RULES §3.1 ห้ามเก็บพิกัด GPS เรียลไทม์ — `pickup_grid` ใน 0013 จึงออกแบบให้**เลือกจากจุดที่กำหนดไว้
+หรือกรอกเอง** ห้ามต่อกับ Geolocation API
 
 ---
 
