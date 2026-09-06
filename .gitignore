@@ -68,3 +68,9 @@ Image*.png
 
 # ---- เอกสารต้นฉบับ workshop (เก็บนอก repo) ----
 *.docx
+
+# ---- Vercel CLI เพิ่มบรรทัด .env* ให้เองตอน vercel link ----
+# กันไฟล์ env ทุกแบบรวมถึง VERCEL_OIDC_TOKEN ที่ CLI เขียนลง .env.local
+# แต่ต้องยกเว้น .env.example ซึ่งเป็นไฟล์ตัวอย่างที่ตั้งใจให้อยู่ใน repo
+.env*
+!.env.example

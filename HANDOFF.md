@@ -211,26 +211,46 @@ migration `0001`–`0015` รันบนโปรเจกต์จริงเ
 
 **ยังไม่ได้ deploy ขึ้น Vercel เลย** — ยังไม่มี live URL
 
-### 🚩 ขั้นแรกที่ต้องทำเมื่อเปิดงานต่อ — **Deploy ขึ้น Vercel ก่อนเขียนฟีเจอร์เพิ่ม**
+### ✅ Deploy แล้ว — https://medrelay-five.vercel.app (6 ก.ย. 2569)
 
-ตอนนี้ยังไม่มี live URL เลย ถ้ามีอะไรผิดพลาดในช่วงที่เหลือจะไม่มีอะไรส่งเลย
-`/sender` ใช้งานได้จริงแล้ว จึง deploy ได้ทันที แล้วค่อยทยอย deploy ฟีเจอร์ที่เหลือตามไป
+ขั้นแรกเดิมคือ deploy ทำเสร็จแล้ว **ขั้นต่อไปคือเติม `/track` ให้ครบวงจร** (ดูตารางด้านล่าง)
+
+**กับดัก 2 ข้อที่เจอตอน deploy ครั้งแรก บันทึกไว้กันเสียเวลาซ้ำ**
+
+1. **🔴 env var ที่เป็นแบบ Sensitive ทำให้ `NEXT_PUBLIC_*` กลายเป็นค่าว่าง**
+
+   ตัวแปรที่ถูกสร้างเป็น Sensitive จะอ่านกลับไม่ได้เลย แต่ `NEXT_PUBLIC_*`
+   **ต้องอ่านได้ตอน build** เพื่อฝังลงบันเดิล ผลคือแอปขึ้น Internal Server Error
+   พร้อม log ว่า `Your project's URL and Key are required to create a Supabase client!`
+   ทั้งที่หน้า Dashboard แสดงว่าตั้งค่าไว้ครบแล้ว — เป็น error ที่ชี้ผิดที่มาก
+
+   วิธีตรวจว่าโดนปัญหานี้อยู่หรือไม่
+
+   ```bash
+   vercel env pull --environment=production /tmp/check
+   grep NEXT_PUBLIC_SUPABASE_URL /tmp/check   # ถ้าได้ [SENSITIVE] คือโดน
+   ```
+
+   วิธีแก้คือลบแล้วเพิ่มใหม่เป็นแบบธรรมดา — ค่าพวกนี้เป็นสาธารณะโดยธรรมชาติอยู่แล้ว
+   (ถูกส่งไปที่ browser ทุกครั้ง) การตั้งเป็น Sensitive จึงไม่ได้เพิ่มความปลอดภัยเลย
+
+   **`SUPABASE_SERVICE_ROLE_KEY` ให้คงเป็น Sensitive ไว้** เพราะเป็นความลับจริง
+   และโค้ดอ่านตอน runtime เท่านั้น ไม่ต้องใช้ตอน build
+
+2. **URL ที่ลงท้ายด้วย `-aim-suvamatha-s-projects.vercel.app` คนนอกเข้าไม่ได้**
+
+   Deployment Protection บังคับให้ล็อกอินบัญชี Vercel ของเจ้าของก่อน
+   ถ้าส่ง URL แบบนั้นให้ผู้ทดสอบ เขาจะเจอหน้า login ของ Vercel แล้วเข้าใจว่าระบบพัง
+   **ต้องส่ง `medrelay-five.vercel.app` เท่านั้น**
+
+**คำสั่ง deploy ครั้งถัดไป**
 
 ```bash
-npm i -g vercel      # ยังไม่ได้ติดตั้งบนเครื่องนี้
+vercel --prod --yes
 ```
 
-| ตัวแปร | ขึ้นต้นด้วย `NEXT_PUBLIC_` ได้ไหม |
-|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | ✅ ได้ |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ ได้ (RLS คุมอีกชั้น) |
-| `SUPABASE_SERVICE_ROLE_KEY` | 🔴 **ห้ามเด็ดขาด** ข้ามทุก RLS |
-| `DATABASE_PASSWORD` | 🔴 ไม่ต้องใส่บน Vercel ใช้เฉพาะเครื่องพัฒนา |
-
-ต้องเพิ่ม production domain ใน Supabase → Authentication → URL Configuration
-ไม่งั้นล็อกอินบน production จะเด้งกลับ localhost
-
-**เกณฑ์ผ่าน:** เปิด live URL จากมือถือนอกเครือข่ายหน่วย ล็อกอินแล้วเปิดคำขอได้จริง
+`.vercelignore` กันไฟล์ข้อมูลจริงไว้แล้ว แต่ถ้าเพิ่มโฟลเดอร์ใหม่ที่มีข้อมูลจริง
+ต้องเพิ่มทั้งใน `.gitignore` และ `.vercelignore` — การเพิ่มที่เดียวไม่พอ
 
 ### ⏱ เวลาที่เหลือจริง — ต้องตัดฟีเจอร์แล้ว
 
@@ -499,7 +519,12 @@ AI_RULES §3.1 ห้ามเก็บพิกัด GPS เรียลไท
 | GitHub | `git@github.com:Aim-suvamatha/Vibe_MedRelay.git` (SSH key ตั้งค่าแล้ว push ได้เลย) |
 | Supabase project ref | `ackjphisdfxqyonfsgwc` (region Singapore) |
 | แผนผังฐานข้อมูล (หน้าเว็บ) | https://claude.ai/code/artifact/545587b4-72be-4ade-a6f4-7d9cc3685c41 |
-| Vercel | **ยังไม่ได้ deploy** |
+| **Live URL (สาธารณะ)** | **https://medrelay-five.vercel.app** ← ใช้ตัวนี้กับผู้ทดสอบและกรรมการ |
+| Vercel project | `aim-suvamatha-s-projects/medrelay` |
+
+⚠️ URL ที่ลงท้ายด้วย `-aim-suvamatha-s-projects.vercel.app` **ใช้กับคนนอกไม่ได้**
+Vercel Deployment Protection บังคับให้ต้องล็อกอินบัญชี Vercel ของเจ้าของก่อน
+ส่วน `medrelay-five.vercel.app` เปิดได้สาธารณะ ตรวจแล้วได้ HTTP 200 จากเครื่องที่ไม่ได้ล็อกอิน
 
 ---
 
@@ -508,6 +533,6 @@ AI_RULES §3.1 ห้ามเก็บพิกัด GPS เรียลไท
 | ความเสี่ยง | สัญญาณ | การรับมือ |
 |---|---|---|
 | **เวลาเหลือน้อยกว่างานที่วางไว้เกินเท่าตัว** | เหลือ ~6–8 ชม. แต่งานตามตารางเดิม 13 ชม. | 🔴 **เป็นจริงแล้ว** — ตัดฟีเจอร์ตาม §3 ทันที อย่ารอ |
-| **ยังไม่ได้ deploy** | ไม่มี live URL ให้ผู้ทดสอบและกรรมการ | 🔴 **เป็นจริงแล้ว** — `/sender` ใช้งานได้จริงแล้ว deploy ได้ทันที เป็นงานลำดับแรกใน §3 |
+| ~~ยังไม่ได้ deploy~~ | — | ✅ **แก้แล้ว 6 ก.ย. 2569** — live URL คือ https://medrelay-five.vercel.app |
 | ยังไม่ได้เริ่มบันทึกข้อความถึงหน่วย | [PROJECT.md §9](./PROJECT.md) ระบุว่าเป็นงานที่รอผู้อื่น เร่งเองไม่ได้ | เริ่มเดินเรื่องคู่ขนานไปกับการพัฒนา |
 | ยังไม่มีผู้ทดสอบ 3–5 คน | ต้องใช้ในช่วง UAT | ทาบทามล่วงหน้า อย่ารอจนระบบเสร็จ |
