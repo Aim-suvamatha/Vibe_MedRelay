@@ -190,10 +190,18 @@
 
 ### คืนสภาพข้อมูลก่อนซ้อมทุกรอบ
 
+เปิด **Terminal** บนเครื่องตัวเอง แล้วพิมพ์สองบรรทัดนี้
+
 ```bash
-export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"
-node supabase/scripts/sql.mjs supabase/reset-demo.sql
+cd ~/Desktop/Learning/MedExccme/Vibe_Project/Vibe_MedRelay
+npm run demo:reset
 ```
+
+> **บรรทัดแรกสำคัญ** — ต้องอยู่ในโฟลเดอร์โครงการก่อน ไม่งั้นจะขึ้น
+> `Could not read package.json` หรือ `ENOENT`
+>
+> ถ้าขึ้น `command not found: node` (เจอเฉพาะบางสภาพแวดล้อม) ให้พิมพ์บรรทัดนี้ก่อนหนึ่งครั้ง
+> `export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"`
 
 ใช้เวลา ~3 วินาที ต้องขึ้น **`✅ พร้อมสาธิต`** และตัวเลขต้องเป็น
 

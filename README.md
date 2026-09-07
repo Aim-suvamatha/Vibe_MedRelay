@@ -182,7 +182,7 @@ npm run dev
 **เดินครบหนึ่งรอบแล้วอยากเริ่มใหม่** — คืนข้อมูลให้พร้อมสาธิตอีกรอบด้วยคำสั่งเดียว
 
 ```bash
-node supabase/scripts/sql.mjs supabase/reset-demo.sql
+npm run demo:reset
 ```
 
 ลบเฉพาะเคสที่สร้างระหว่างทดลอง คืนเคสที่รอจัดรถและเคสที่กำลังเดินทางให้กลับมา
@@ -202,6 +202,8 @@ npm run typecheck    # ตรวจ TypeScript (รัน build หนึ่ง�
 
 npm run test:unit    # สูตรคำนวณเวลาและมัธยฐาน 11 ข้อ
 npm run db:test      # migration + seed + ทดสอบ 77 ข้อ บน PGlite ในเครื่อง
+
+npm run demo:reset   # คืนข้อมูลให้พร้อมสาธิตอีกรอบ (ใช้ก่อนซ้อม demo ทุกครั้ง)
 ```
 
 **ตรวจบนฐานข้อมูลจริงก่อน deploy ทุกครั้ง** — ทุกไฟล์อยู่ใน transaction ที่ปิดท้ายด้วย
