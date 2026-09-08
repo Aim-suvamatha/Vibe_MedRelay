@@ -27,6 +27,11 @@
 | 14 | `migrations/0014_treatment_property.sql` | ตาราง `treatment` และ `property_item` พร้อม RLS |
 | 15 | `migrations/0015_evac_request.sql` | ตาราง `pickup_point` + function `create_evac_request()` |
 | 16 | `migrations/0016_vehicle_status_sync.sql` | trigger จองรถเมื่อทอดถูกจัดรถ และคืนรถเมื่อทอดจบ |
+| 17 | `migrations/0017_metrics_seconds.sql` | เพิ่มคอลัมน์วินาทีให้ view แดชบอร์ด |
+| 18 | `migrations/0018_form_enums_v2.sql` | enum ชุดที่สอง · **ต้องเป็นคนละ transaction กับ 0020** (อ่านหัวไฟล์) |
+| 19 | `migrations/0019_casualty.sql` | ตาราง `casualty` ประวัติผู้ป่วยตาม ทบ.466-901 พร้อม RLS |
+| 20 | `migrations/0020_case_form_fields_v2.sql` | คอลัมน์ที่เหลือใน `case` + constraint เวลาของ `treatment` |
+| 21 | `migrations/0021_create_evac_request_v2.sql` | `create_evac_request` ตัวใหม่ + `release_tourniquet` |
 
 จากนั้นใส่ข้อมูลจำลอง
 
@@ -35,6 +40,7 @@
 | 12 | `seed.sql` | หน่วย + รถ · รันได้ทันที ไม่ต้องมี auth user |
 | 13 | `seed_profiles.sql` | **ต้องสร้าง auth user 4 บัญชีที่ Dashboard ก่อน** (อ่านหัวไฟล์) |
 | 14 | `seed_demo_cases.sql` | เคสจำลอง 11 เคสสำหรับสาธิตแดชบอร์ด |
+| 15 | `seed_pickup_points.sql` | จุดนัดรับจำลอง 8 จุด |
 
 หรือถ้าใช้ Supabase CLI
 

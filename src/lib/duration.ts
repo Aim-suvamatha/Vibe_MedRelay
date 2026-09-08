@@ -69,3 +69,44 @@ export function formatDuration(sec: number | null): string {
   const days = Math.floor(hours / 24);
   return `${days} วัน ${hours % 24} ชม.`;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+ * เวลาไทย
+ *
+ * ★ อยู่ในไฟล์นี้เพราะต้องเรียกได้จากทั้ง server component และ client component
+ *   เดิมอยู่ใน relative-time.tsx ซึ่งมี "use client" อยู่หัวไฟล์
+ *   Next จึงปฏิเสธเมื่อ server component เรียกมันเป็นฟังก์ชัน
+ *   ("Attempted to call formatClockTh() from the server but it is on the client")
+ *   component ที่มี "use client" ส่งข้ามเส้นได้เฉพาะตัว component เอง ไม่ใช่ฟังก์ชันธรรมดา
+ *   ไฟล์นี้ไม่มี "use client" และไม่ import อะไรเลย จึงเป็นบ้านที่ถูกต้อง
+ * ═══════════════════════════════════════════════════════════════ */
+
+/**
+ * เขตเวลาอ้างอิงเดียวของทั้งระบบ
+ *
+ * ★ ต้องระบุเสมอ ห้ามปล่อยให้ Intl ใช้เขตเวลาของเครื่อง
+ *   ไม่งั้นเวลาที่แสดงจะขึ้นกับนาฬิกาของเครื่องที่เปิดดู
+ *   เครื่องที่ตั้งผิดหรือผู้ใช้ที่เปิดจากนอกประเทศจะเห็นคนละเวลากับที่บันทึกจริง
+ *   อันตรายที่สุดกับเวลาที่รัดสายห้ามเลือด ซึ่งเป็นนาฬิกาที่มีผลทางคลินิก
+ *   ค่าเดียวกับที่ v_leg_metrics และ metrics.ts ใช้คิด service_date
+ */
+export const BANGKOK_TZ = "Asia/Bangkok";
+
+const CLOCK_TH = new Intl.DateTimeFormat("th-TH", {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  timeZone: BANGKOK_TZ,
+});
+
+/**
+ * เวลานาฬิกาตามเวลาไทยเสมอ เช่น "08:14"
+ *
+ * ⚠ ฟังก์ชันนี้แปลง "จุดเวลา" เป็น "เลขบนหน้าปัด" เท่านั้น
+ *   การคำนวณผลต่างเวลา (เช่น รัดมาแล้วกี่นาที) ไม่ต้องพึ่งเขตเวลาเลย
+ *   เพราะ timestamptz เก็บเป็นจุดเวลาสัมบูรณ์ ลบกันได้ผลเท่ากันทุกเครื่อง
+ */
+export function formatClockTh(value: string | number | Date): string {
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? "—" : CLOCK_TH.format(d);
+}

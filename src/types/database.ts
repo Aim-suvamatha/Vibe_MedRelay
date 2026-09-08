@@ -115,9 +115,11 @@ export type Database = {
       }
       case: {
         Row: {
+          airway_status: Database["public"]["Enums"]["airway_status"] | null
           approved_at: string | null
           approved_by: string | null
           case_code: string
+          chest_status: Database["public"]["Enums"]["chest_status"] | null
           chief_complaint: string
           client_uuid: string | null
           closed_at: string | null
@@ -139,10 +141,15 @@ export type Database = {
           mechanism: string | null
           nbc_status: Database["public"]["Enums"]["nbc_status"]
           on_duty: boolean | null
+          operating_base: string | null
           operation_type: string | null
           origin_unit_id: string
+          other_note: string | null
           outcome: Database["public"]["Enums"]["case_outcome"] | null
           patient_alias: string | null
+          patient_category:
+            | Database["public"]["Enums"]["patient_category"]
+            | null
           patient_count: number
           patient_mobility:
             | Database["public"]["Enums"]["patient_mobility"]
@@ -159,11 +166,14 @@ export type Database = {
           symptom_onset_at: string | null
           transport_mode: Database["public"]["Enums"]["transport_mode"] | null
           triage: Database["public"]["Enums"]["triage_color"] | null
+          wound_status: Database["public"]["Enums"]["wound_status"] | null
         }
         Insert: {
+          airway_status?: Database["public"]["Enums"]["airway_status"] | null
           approved_at?: string | null
           approved_by?: string | null
           case_code: string
+          chest_status?: Database["public"]["Enums"]["chest_status"] | null
           chief_complaint: string
           client_uuid?: string | null
           closed_at?: string | null
@@ -185,10 +195,15 @@ export type Database = {
           mechanism?: string | null
           nbc_status?: Database["public"]["Enums"]["nbc_status"]
           on_duty?: boolean | null
+          operating_base?: string | null
           operation_type?: string | null
           origin_unit_id: string
+          other_note?: string | null
           outcome?: Database["public"]["Enums"]["case_outcome"] | null
           patient_alias?: string | null
+          patient_category?:
+            | Database["public"]["Enums"]["patient_category"]
+            | null
           patient_count?: number
           patient_mobility?:
             | Database["public"]["Enums"]["patient_mobility"]
@@ -209,11 +224,14 @@ export type Database = {
           symptom_onset_at?: string | null
           transport_mode?: Database["public"]["Enums"]["transport_mode"] | null
           triage?: Database["public"]["Enums"]["triage_color"] | null
+          wound_status?: Database["public"]["Enums"]["wound_status"] | null
         }
         Update: {
+          airway_status?: Database["public"]["Enums"]["airway_status"] | null
           approved_at?: string | null
           approved_by?: string | null
           case_code?: string
+          chest_status?: Database["public"]["Enums"]["chest_status"] | null
           chief_complaint?: string
           client_uuid?: string | null
           closed_at?: string | null
@@ -235,10 +253,15 @@ export type Database = {
           mechanism?: string | null
           nbc_status?: Database["public"]["Enums"]["nbc_status"]
           on_duty?: boolean | null
+          operating_base?: string | null
           operation_type?: string | null
           origin_unit_id?: string
+          other_note?: string | null
           outcome?: Database["public"]["Enums"]["case_outcome"] | null
           patient_alias?: string | null
+          patient_category?:
+            | Database["public"]["Enums"]["patient_category"]
+            | null
           patient_count?: number
           patient_mobility?:
             | Database["public"]["Enums"]["patient_mobility"]
@@ -259,6 +282,7 @@ export type Database = {
           symptom_onset_at?: string | null
           transport_mode?: Database["public"]["Enums"]["transport_mode"] | null
           triage?: Database["public"]["Enums"]["triage_color"] | null
+          wound_status?: Database["public"]["Enums"]["wound_status"] | null
         }
         Relationships: [
           {
@@ -305,6 +329,106 @@ export type Database = {
           last_no?: number
         }
         Relationships: []
+      }
+      casualty: {
+        Row: {
+          affiliation: string | null
+          age_years: number | null
+          blood_group: Database["public"]["Enums"]["blood_group"] | null
+          branch: Database["public"]["Enums"]["armed_branch"] | null
+          case_id: string
+          chronic_conditions: string | null
+          created_at: string
+          drug_allergy: string | null
+          ethnicity: string | null
+          first_name: string | null
+          food_allergy: string | null
+          height_cm: number | null
+          last_name: string | null
+          nationality: string | null
+          past_history: string | null
+          phone: string | null
+          rank_th: string | null
+          recorded_at: string
+          recorded_by: string
+          regular_meds: string | null
+          rh: Database["public"]["Enums"]["rh_factor"] | null
+          service_number: string | null
+          weight_kg: number | null
+        }
+        Insert: {
+          affiliation?: string | null
+          age_years?: number | null
+          blood_group?: Database["public"]["Enums"]["blood_group"] | null
+          branch?: Database["public"]["Enums"]["armed_branch"] | null
+          case_id: string
+          chronic_conditions?: string | null
+          created_at?: string
+          drug_allergy?: string | null
+          ethnicity?: string | null
+          first_name?: string | null
+          food_allergy?: string | null
+          height_cm?: number | null
+          last_name?: string | null
+          nationality?: string | null
+          past_history?: string | null
+          phone?: string | null
+          rank_th?: string | null
+          recorded_at?: string
+          recorded_by: string
+          regular_meds?: string | null
+          rh?: Database["public"]["Enums"]["rh_factor"] | null
+          service_number?: string | null
+          weight_kg?: number | null
+        }
+        Update: {
+          affiliation?: string | null
+          age_years?: number | null
+          blood_group?: Database["public"]["Enums"]["blood_group"] | null
+          branch?: Database["public"]["Enums"]["armed_branch"] | null
+          case_id?: string
+          chronic_conditions?: string | null
+          created_at?: string
+          drug_allergy?: string | null
+          ethnicity?: string | null
+          first_name?: string | null
+          food_allergy?: string | null
+          height_cm?: number | null
+          last_name?: string | null
+          nationality?: string | null
+          past_history?: string | null
+          phone?: string | null
+          rank_th?: string | null
+          recorded_at?: string
+          recorded_by?: string
+          regular_meds?: string | null
+          rh?: Database["public"]["Enums"]["rh_factor"] | null
+          service_number?: string | null
+          weight_kg?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "casualty_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: true
+            referencedRelation: "case"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "casualty_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: true
+            referencedRelation: "v_case_metrics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "casualty_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       event_log: {
         Row: {
@@ -936,20 +1060,36 @@ export type Database = {
       can_see_case: { Args: { c_id: string }; Returns: boolean }
       create_evac_request: {
         Args: {
+          p_airway_status?: Database["public"]["Enums"]["airway_status"]
           p_avpu?: Database["public"]["Enums"]["avpu_level"]
+          p_casualty?: Json
+          p_chest_status?: Database["public"]["Enums"]["chest_status"]
           p_chief_complaint: string
           p_client_uuid?: string
           p_dbp?: number
           p_findings?: string
           p_gcs?: number
+          p_hostile_action?: boolean
+          p_injury_grid?: string
+          p_injury_place?: string
+          p_injury_sites?: Json
           p_mechanism?: string
           p_nbc_status?: Database["public"]["Enums"]["nbc_status"]
+          p_on_duty?: boolean
+          p_operating_base?: string
+          p_operation_type?: string
+          p_other_note?: string
           p_patient_alias?: string
+          p_patient_category?: Database["public"]["Enums"]["patient_category"]
           p_patient_count?: number
           p_patient_mobility?: Database["public"]["Enums"]["patient_mobility"]
+          p_patient_rank_group?: Database["public"]["Enums"]["rank_group"]
+          p_pickup_grid?: string
           p_pickup_marking?: string
           p_pickup_point_id?: string
           p_precedence: Database["public"]["Enums"]["precedence_level"]
+          p_property_items?: Json
+          p_protective_gear?: Json
           p_pulse?: number
           p_report_category?: Database["public"]["Enums"]["report_category"]
           p_resp_rate?: number
@@ -957,9 +1097,12 @@ export type Database = {
           p_security_status?: Database["public"]["Enums"]["security_status"]
           p_spo2?: number
           p_symptom_onset_at?: string
+          p_temperature?: number
           p_to_unit_id: string
           p_transport_mode?: Database["public"]["Enums"]["transport_mode"]
+          p_treatments?: Json
           p_triage?: Database["public"]["Enums"]["triage_color"]
+          p_wound_status?: Database["public"]["Enums"]["wound_status"]
         }
         Returns: {
           case_code: string
@@ -977,8 +1120,14 @@ export type Database = {
         Returns: boolean
       }
       next_case_code: { Args: never; Returns: string }
+      release_tourniquet: { Args: { p_id: string }; Returns: number }
     }
     Enums: {
+      airway_status:
+        | "normal"
+        | "oral_airway"
+        | "nasal_airway"
+        | "cricothyrotomy"
       app_role:
         | "sender"
         | "transporter"
@@ -986,10 +1135,23 @@ export type Database = {
         | "monitor"
         | "commander"
         | "admin"
+      armed_branch:
+        | "army"
+        | "navy"
+        | "air_force"
+        | "police"
+        | "civilian"
+        | "other"
       assessment_kind: "initial" | "enroute" | "handover"
       avpu_level: "alert" | "voice" | "pain" | "unresponsive"
+      blood_group: "O" | "A" | "B" | "AB"
       case_outcome: "recovered" | "hospitalized" | "died"
       case_status: "requested" | "active" | "completed" | "cancelled"
+      chest_status:
+        | "normal"
+        | "occlusive_dressing"
+        | "needle_decompression"
+        | "chest_tube"
       disposition_route: "evac_chain" | "civilian_hospital" | "returned_to_unit"
       leg_status:
         | "pending"
@@ -1000,13 +1162,14 @@ export type Database = {
         | "completed"
         | "cancelled"
       nbc_status: "none" | "suspected" | "confirmed"
+      patient_category: "combat" | "admin" | "other"
       patient_mobility:
         | "litter_dependent"
         | "litter_assisted"
         | "ambulatory"
         | "psych_escort"
         | "psych_no_escort"
-      precedence_level: "urgent" | "priority" | "routine"
+      precedence_level: "urgent" | "priority" | "routine" | "died"
       rank_group: "officer" | "nco" | "enlisted" | "volunteer"
       report_category:
         | "combat_gunshot"
@@ -1020,6 +1183,7 @@ export type Database = {
         | "illness_malaria"
         | "illness_std"
         | "illness_other"
+      rh_factor: "positive" | "negative"
       role_of_care: "role_1" | "role_2" | "role_3" | "role_4"
       security_status: "secure" | "possible_contact" | "active_contact"
       transport_mode: "ground" | "rotary" | "fixed_wing" | "watercraft"
@@ -1039,6 +1203,9 @@ export type Database = {
         | "antibiotic"
         | "txa"
         | "other"
+        | "tetanus_serum"
+        | "tetanus_toxoid"
+        | "blood_product"
       vehicle_status:
         | "available"
         | "dispatched"
@@ -1046,6 +1213,7 @@ export type Database = {
         | "maintenance"
         | "offline"
       vehicle_type: "bls" | "als" | "utility" | "rotary" | "fixed_wing"
+      wound_status: "normal" | "dressing" | "tourniquet" | "windlass"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1173,6 +1341,12 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      airway_status: [
+        "normal",
+        "oral_airway",
+        "nasal_airway",
+        "cricothyrotomy",
+      ],
       app_role: [
         "sender",
         "transporter",
@@ -1181,10 +1355,25 @@ export const Constants = {
         "commander",
         "admin",
       ],
+      armed_branch: [
+        "army",
+        "navy",
+        "air_force",
+        "police",
+        "civilian",
+        "other",
+      ],
       assessment_kind: ["initial", "enroute", "handover"],
       avpu_level: ["alert", "voice", "pain", "unresponsive"],
+      blood_group: ["O", "A", "B", "AB"],
       case_outcome: ["recovered", "hospitalized", "died"],
       case_status: ["requested", "active", "completed", "cancelled"],
+      chest_status: [
+        "normal",
+        "occlusive_dressing",
+        "needle_decompression",
+        "chest_tube",
+      ],
       disposition_route: [
         "evac_chain",
         "civilian_hospital",
@@ -1200,6 +1389,7 @@ export const Constants = {
         "cancelled",
       ],
       nbc_status: ["none", "suspected", "confirmed"],
+      patient_category: ["combat", "admin", "other"],
       patient_mobility: [
         "litter_dependent",
         "litter_assisted",
@@ -1207,7 +1397,7 @@ export const Constants = {
         "psych_escort",
         "psych_no_escort",
       ],
-      precedence_level: ["urgent", "priority", "routine"],
+      precedence_level: ["urgent", "priority", "routine", "died"],
       rank_group: ["officer", "nco", "enlisted", "volunteer"],
       report_category: [
         "combat_gunshot",
@@ -1222,6 +1412,7 @@ export const Constants = {
         "illness_std",
         "illness_other",
       ],
+      rh_factor: ["positive", "negative"],
       role_of_care: ["role_1", "role_2", "role_3", "role_4"],
       security_status: ["secure", "possible_contact", "active_contact"],
       transport_mode: ["ground", "rotary", "fixed_wing", "watercraft"],
@@ -1241,6 +1432,9 @@ export const Constants = {
         "antibiotic",
         "txa",
         "other",
+        "tetanus_serum",
+        "tetanus_toxoid",
+        "blood_product",
       ],
       vehicle_status: [
         "available",
@@ -1250,6 +1444,7 @@ export const Constants = {
         "offline",
       ],
       vehicle_type: ["bls", "als", "utility", "rotary", "fixed_wing"],
+      wound_status: ["normal", "dressing", "tourniquet", "windlass"],
     },
   },
 } as const

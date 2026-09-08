@@ -3,6 +3,7 @@ import { LegSection } from "@/components/medrelay/leg-list";
 import { NoAccessNotice } from "@/components/medrelay/no-access";
 import { getProfile, hasAnyRole } from "@/lib/auth/profile";
 import { getIncomingLegs } from "@/lib/leg-queries";
+import { getTourniquetsByCase } from "@/lib/tourniquet";
 
 /**
  * หน้า /receiver — ผู้ป่วยที่กำลังมาถึงหน่วยนี้ (F3 · Prompt 08)
@@ -36,6 +37,14 @@ export default async function Page() {
 
   const { inbound, done } = await getIncomingLegs(profile.unitId);
 
+  /**
+   * ปลายทางต้องรู้ก่อนรับตัวว่ามีสายรัดกี่เส้นและรัดมานานแค่ไหน
+   * เป็นข้อมูลชุดเดียวในเคสที่มีนาฬิกาเดินอยู่และมีผลต่อการเตรียมทีมรับ
+   */
+  const tourniquets = await getTourniquetsByCase(
+    [...inbound, ...done].map((l) => l.caseId),
+  );
+
   return (
     <>
       <AppHeader
@@ -49,6 +58,7 @@ export default async function Page() {
             emptyText="ยังไม่มีผู้ป่วยที่กำลังส่งมาหน่วยนี้"
             legs={inbound}
             showTransporter
+            tourniquets={tourniquets}
           />
 
           <LegSection
@@ -56,6 +66,7 @@ export default async function Page() {
             emptyText="ยังไม่มีผู้ป่วยที่หน่วยนี้รับมอบ"
             legs={done}
             showTransporter
+            tourniquets={tourniquets}
           />
         </div>
       </AppShell>

@@ -42,6 +42,10 @@ export type LegListItem = {
   triage: TriageColor | null;
   chiefComplaint: string;
   patientAlias: string | null;
+  /** ยศ ชื่อ นามสกุล จากตาราง casualty — null เมื่อยังไม่ได้บันทึกประวัติ */
+  patientName: string | null;
+  /** สังกัดหน่วยของผู้ป่วย ไม่ใช่หน่วยต้นทางของทอด */
+  patientAffiliation: string | null;
   patientCount: number;
   fromUnit: string;
   toUnit: string;
@@ -60,7 +64,10 @@ const SELECT = `
   to_unit:to_unit_id (name_th),
   vehicle:vehicle_id (call_sign),
   transporter:transporter_id (full_name, rank_th),
-  case:case_id (case_code, precedence, triage, chief_complaint, patient_alias, patient_count)
+  case:case_id (
+    case_code, precedence, triage, chief_complaint, patient_alias, patient_count,
+    casualty (rank_th, first_name, last_name, affiliation)
+  )
 `;
 
 /** PostgREST คืน relation แบบ many-to-one เป็น object แต่บาง query คืนเป็น array */
@@ -94,6 +101,20 @@ type RawLeg = {
         chief_complaint: string;
         patient_alias: string | null;
         patient_count: number;
+        casualty:
+          | {
+              rank_th: string | null;
+              first_name: string | null;
+              last_name: string | null;
+              affiliation: string | null;
+            }
+          | {
+              rank_th: string | null;
+              first_name: string | null;
+              last_name: string | null;
+              affiliation: string | null;
+            }[]
+          | null;
       }
     | {
         case_code: string;
@@ -102,6 +123,20 @@ type RawLeg = {
         chief_complaint: string;
         patient_alias: string | null;
         patient_count: number;
+        casualty:
+          | {
+              rank_th: string | null;
+              first_name: string | null;
+              last_name: string | null;
+              affiliation: string | null;
+            }
+          | {
+              rank_th: string | null;
+              first_name: string | null;
+              last_name: string | null;
+              affiliation: string | null;
+            }[]
+          | null;
       }[]
     | null;
 };
@@ -112,6 +147,10 @@ function toItem(l: RawLeg): LegListItem | null {
   if (!c) return null;
 
   const t = one(l.transporter);
+  const cas = one(c.casualty);
+  const name = [cas?.rank_th, cas?.first_name, cas?.last_name]
+    .filter(Boolean)
+    .join(" ");
 
   return {
     id: l.id,
@@ -123,6 +162,8 @@ function toItem(l: RawLeg): LegListItem | null {
     triage: (c.triage as TriageColor | null) ?? null,
     chiefComplaint: c.chief_complaint,
     patientAlias: c.patient_alias,
+    patientName: name || null,
+    patientAffiliation: cas?.affiliation ?? null,
     patientCount: c.patient_count,
     fromUnit: one(l.from_unit)?.name_th ?? "—",
     toUnit: one(l.to_unit)?.name_th ?? "—",

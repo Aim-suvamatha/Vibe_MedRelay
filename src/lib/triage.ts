@@ -98,15 +98,35 @@ export const PRECEDENCE: Record<PrecedenceLevel, PrecedenceMeta> = {
   urgent: { label: "ด่วนที่สุด", term: "Urgent", triage: "red" },
   priority: { label: "ด่วน", term: "Priority", triage: "yellow" },
   routine: { label: "ปกติ", term: "Routine", triage: "green" },
+  /**
+   * ★ died ไม่ใช่ระดับความเร่งด่วนในความหมายเดียวกับสามค่าบน
+   *   เพิ่มเข้ามาเพราะฟอร์มตัดช่องเลือก triage ออกแล้ว (8 ก.ย. 2569)
+   *   ผู้ใช้จึงต้องบอก "เกินเยียวยา" ผ่านปุ่มชุดนี้ชุดเดียว
+   *   ผลข้างเคียงที่ต้องรู้: metrics.ts กันเคสนี้ออกจากค่ามัธยฐานเวลา
+   */
+  died: { label: "เสียชีวิต", term: "Died", triage: "black" },
 };
 
 export const PRECEDENCE_ORDER: readonly PrecedenceLevel[] = [
   "urgent",
   "priority",
   "routine",
+  "died",
 ];
 
 /** แปลง precedence เป็นสี triage ตามการตัดสินใจด้านบน */
 export function precedenceTriage(p: PrecedenceLevel): TriageColor {
   return PRECEDENCE[p].triage;
 }
+
+/**
+ * ป้ายชั้นการรักษาของหน่วย
+ * เดิมประกาศซ้ำกันในทั้ง sender-form.tsx และ next-leg-form.tsx
+ * ยกขึ้นมาไว้ที่นี่เพราะเป็นคำที่ต้องตรงกันทุกหน้า
+ */
+export const ROLE_LEVEL_LABEL: Record<string, string> = {
+  role_1: "ชั้น 1",
+  role_2: "ชั้น 2",
+  role_3: "ชั้น 3",
+  role_4: "ชั้น 4",
+};

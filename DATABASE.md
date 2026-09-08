@@ -587,3 +587,75 @@ group by c.id;
 | `transfer_leg.leg_no` ไม่จำกัดจำนวน | ภารกิจสาธารณภัยที่อาจมีทอดมากกว่าที่คาด |
 | `event_log.payload jsonb` | เก็บ context เพิ่มโดยไม่ต้อง migrate schema |
 | `assessment` แยกจาก `case` | export FHIR Observation ในอนาคต |
+
+---
+
+## 10. ส่วนขยายจากแบบฟอร์มกระดาษ ชุดที่สอง (migration 0018–0021 · 8 ก.ย. 2569)
+
+### 10.1 enum ที่เพิ่ม
+
+| enum | ค่า | ที่มา |
+|---|---|---|
+| `armed_branch` | army · navy · air_force · police · civilian · other | ทบ.466-901 ช่อง ๔ |
+| `blood_group` | O · A · B · AB | ช่องติ๊กหมู่โลหิต |
+| `rh_factor` | positive · negative | ช่องติ๊ก Rh+ve / Rh-ve |
+| `patient_category` | combat · admin · other | บาดเจ็บยุทธการ · ธุรการ · อื่นๆ |
+| `airway_status` | normal · oral_airway · nasal_airway · cricothyrotomy | ทบ.466-901 ด้านหลัง แถวทางเดินหายใจ |
+| `chest_status` | normal · occlusive_dressing · needle_decompression · chest_tube | แถวปอด |
+| `wound_status` | normal · dressing · tourniquet · windlass | แถวแผล |
+
+ค่าที่เพิ่มเข้า enum เดิม — `precedence_level` เพิ่ม `died` · `tx_code` เพิ่ม `tetanus_serum` `tetanus_toxoid` `blood_product`
+
+> ⚠ `ALTER TYPE ... ADD VALUE` ต้องอยู่คนละ transaction กับคำสั่งที่ใช้ค่านั้น
+> จึงต้องรัน `0018` ให้จบก่อน แล้วค่อยรัน `0020` เป็นไฟล์แยก
+
+### 10.2 ตาราง `casualty` — ประวัติผู้ป่วยรายบุคคล
+
+`case_id uuid PK REFERENCES case(id) ON DELETE CASCADE` (บังคับ 1:1 ที่ระดับโครงสร้าง)
+· `rank_th` · `first_name` · `last_name` · `service_number` · `affiliation` · `branch`
+· `age_years` · `nationality` · `ethnicity`
+· `blood_group` · `rh` · `drug_allergy` · `food_allergy` · `chronic_conditions` · `past_history` · `regular_meds`
+· `weight_kg numeric(5,1)` · `height_cm numeric(5,1)` · `phone`
+· `recorded_by` · `recorded_at` · `created_at`
+
+**constraint** — `casualty_service_number_format` บังคับ `^[0-9]{10}$` (เลขประจำตัวทหาร ไม่ใช่เลขบัตรประชาชน)
+· `casualty_no_national_id` กันเลข 13 หลักหลุดเข้าช่องชื่อหรือสังกัด
+
+**RLS** — `select`/`insert`/`update` ใช้ `can_see_case()` เหมือนตารางลูกอื่น
+**`delete` เปิดให้ `has_role('admin')` เท่านั้น** ซึ่งต่างจากทุกตารางในระบบ
+ตารางเวชระเบียน (`assessment` `treatment` `event_log`) ไม่มี policy DELETE เลยโดยเจตนา
+แต่ตารางนี้ต้องลบได้เพราะเป็นข้อมูลส่วนบุคคลที่เจ้าของมีสิทธิ์ขอให้ลบ (AI_RULES §3.4)
+**นี่คือเหตุผลทั้งหมดที่แยกเป็นตารางแทนที่จะเพิ่มคอลัมน์ใน `case`** —
+การลบแถวนี้ไม่ทำให้เวชระเบียนหรือตัวเลขบนแดชบอร์ดเสียหาย
+
+### 10.3 คอลัมน์ที่เพิ่มใน `case`
+
+`operating_base` · `other_note` · `patient_category` · `airway_status` · `chest_status` · `wound_status`
+
+### 10.4 constraint ใหม่ของ `treatment`
+
+`treatment_given_not_future check (given_at <= now())`
+
+`given_at` เป็น **ข้อยกเว้นเดียวของกฎ "ไม่มีช่องกรอกเวลา"** ทั้งโครงการ
+สายรัดห้ามเลือดมักถูกรัดก่อนที่เสนารักษ์จะได้หยิบเครื่องขึ้นมากรอก
+ถ้าบันทึกเวลาที่กดปุ่มแทนเวลาที่รัดจริง นาฬิกาขาดเลือดจะสั้นกว่าความจริง
+ซึ่งอันตรายเพราะรัดเกิน 2 ชั่วโมงเสี่ยงต่อการสูญเสียอวัยวะ
+ข้อยกเว้นนี้ไม่ทำให้กฎเดิมพัง เพราะ `treatment.given_at` **ไม่ได้ถูกใช้ในสูตรใด**
+ของ `v_leg_metrics` หรือ `v_case_metrics` — ตัวเลขเวลาตอบสนองมาจาก `transfer_leg` ล้วนๆ
+
+### 10.5 function
+
+| function | หน้าที่ |
+|---|---|
+| `create_evac_request(...)` | ตัวใหม่ 43 พารามิเตอร์ · เปิด `case` + `transfer_leg` + `assessment` + `casualty` + `treatment[]` + `property_item[]` ในหนึ่ง statement · ตั้ง `case.triage` จาก `precedence` เอง |
+| `release_tourniquet(p_id)` | คลายสายรัด · เวลามาจาก `now()` ของฐานข้อมูล · คืนจำนวนแถวที่แก้ได้จริง ไม่โยน exception |
+
+ทั้งสองเป็น **SECURITY INVOKER** policy เป็นคนตัดสินสิทธิ์ ไม่ใช่ตัว function
+
+### 10.6 ผลกระทบของ `precedence = 'died'`
+
+`precedence` ปรากฏใน `v_leg_metrics` และ `v_case_metrics`
+`src/lib/metrics.ts` **กันเคส `died` ออกจากค่ามัธยฐานเวลา** (ตัวแปร `timedLegs`)
+ผู้เสียชีวิตไม่ได้เร่งรถ เวลาส่งกลับจึงยาวกว่าปกติโดยธรรมชาติ
+ถ้านับรวม ตัวเลข "เวลาจากร้องขอถึงส่งมอบ" จะดูแย่ลงทั้งที่ระบบทำงานปกติ
+ยังนับรวมใน `byPrecedence` และ `caseTotal` ตามปกติ — ยอดต้องครบเสมอ

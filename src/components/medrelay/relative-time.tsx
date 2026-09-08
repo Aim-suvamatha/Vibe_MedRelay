@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BANGKOK_TZ } from "@/lib/duration";
 import { cn } from "@/lib/utils";
 
 /**
@@ -17,14 +18,24 @@ import { cn } from "@/lib/utils";
 
 const REFRESH_MS = 30_000;
 
-const FULL = new Intl.DateTimeFormat("th-TH", {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
-
 function toDate(value: string | number | Date): Date {
   return value instanceof Date ? value : new Date(value);
 }
+
+/**
+ * ★ ต้องระบุ timeZone เสมอ ห้ามปล่อยให้ Intl ใช้เขตเวลาของเครื่องที่เปิดดู
+ *   เหตุผลเต็มอยู่ที่ BANGKOK_TZ ใน src/lib/duration.ts
+ *
+ * ⚠ formatClockTh ย้ายไปอยู่ที่ duration.ts แล้ว อย่าย้ายกลับมาที่นี่
+ *   ไฟล์นี้มี "use client" อยู่หัวไฟล์ server component จึงเรียกฟังก์ชันจากที่นี่ไม่ได้
+ *   ("Attempted to call ... from the server but it is on the client")
+ *   สิ่งที่ข้ามเส้นได้จากไฟล์นี้มีแค่ตัว component เท่านั้น
+ */
+const FULL = new Intl.DateTimeFormat("th-TH", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: BANGKOK_TZ,
+});
 
 /** ระยะเวลาที่ผ่านไปแบบสั้น เช่น "44 น." หรือ "1 ชม. 06 น." ตามคอลัมน์ "เวลาสะสม" ใน wireframe 05 */
 export function formatElapsed(ms: number): string {

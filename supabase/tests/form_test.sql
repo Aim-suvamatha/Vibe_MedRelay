@@ -40,8 +40,8 @@ grant all on public._who to public;
 --     ซึ่ง PGlite ในเครื่องพิสูจน์แทน Supabase จริงไม่ได้
 -- =============================================================
 insert into public._form_result
-select -8, 'S1 มีตารางครบ 11 ตาราง',
-       case when count(*) = 11 then 'PASS' else 'FAIL' end, count(*) || ' ตาราง'
+select -8, 'S1 มีตารางครบ 12 ตาราง',
+       case when count(*) = 12 then 'PASS' else 'FAIL' end, count(*) || ' ตาราง'
 from pg_tables where schemaname = 'public'
   and tablename not in ('_form_result', '_who');
 
@@ -505,6 +505,206 @@ exception when insufficient_privilege or others then
     'L8 ★ transporter ที่ไม่มีบทบาท sender เปิดเคสไม่ได้', 'PASS',
     'RLS ปฏิเสธถูกต้อง');
 end $$;
+
+-- =============================================================
+-- M — แบบฟอร์มชุดที่สอง (migration 0018-0021)
+--     ประวัติผู้ป่วย · สายรัดห้ามเลือด · บัญชีสิ่งของ · ความเร่งด่วน died
+-- =============================================================
+select set_config('request.jwt.claims',
+  json_build_object('sub', (select p1::text from public._who), 'role', 'authenticated')::text, true);
+
+do $$
+declare
+  u_hosp uuid := (select id from public.unit where code = 'DEMO-HOSP');
+  r      record;
+  n      int;
+  v_txt  text;
+begin
+  -- ── M1 เปิดเคสพร้อมทุกตารางลูกในครั้งเดียว ────────────────
+  select * into r from public.create_evac_request(
+    p_precedence      => 'urgent',
+    p_chief_complaint => 'แผลกระสุนต้นขาขวา (ทดสอบ M)',
+    p_to_unit_id      => u_hosp,
+    p_pickup_grid     => 'QA 114 882',
+    p_on_duty         => true,
+    p_hostile_action  => true,
+    p_patient_category => 'combat',
+    p_airway_status   => 'normal',
+    p_temperature     => 37.2,
+    p_injury_sites    => '[{"site":"right_thigh","type":"laceration"}]'::jsonb,
+    p_protective_gear => '["helmet","body_armor"]'::jsonb,
+    p_casualty        => jsonb_build_object(
+                           'rank_th', 'ส.อ.', 'first_name', 'ทดสอบ',
+                           'last_name', 'นามสมมติ', 'service_number', '9911223344',
+                           'affiliation', 'ร้อย.ร.ทดสอบ', 'branch', 'army',
+                           'blood_group', 'O', 'rh', 'positive',
+                           'drug_allergy', 'ไม่มี'),
+    p_treatments      => jsonb_build_array(
+                           jsonb_build_object('tx_code','tourniquet','site','ต้นขาขวา',
+                                              'given_at', (now() - interval '41 minutes')::text),
+                           jsonb_build_object('tx_code','tourniquet','site','ต้นแขนซ้าย',
+                                              'given_at', (now() - interval '24 minutes')::text),
+                           jsonb_build_object('tx_code','iv_fluid','detail','NSS','dose','500 ml','route','IV')),
+    p_property_items  => jsonb_build_array(
+                           jsonb_build_object('item_name','อาวุธประจำกาย','qty',1,'unit_label','กระบอก'),
+                           jsonb_build_object('item_name','','qty',9))   -- ชื่อว่าง ต้องถูกข้าม
+  );
+
+  select count(*) into n from public.casualty where case_id = r.case_id;
+  insert into public._form_result values (30,
+    'M1 เปิดเคสพร้อมประวัติผู้ป่วยในครั้งเดียว',
+    case when n = 1 then 'PASS' else 'FAIL' end, n || ' แถว');
+
+  select count(*) into n from public.treatment where case_id = r.case_id;
+  insert into public._form_result values (31,
+    'M2 บันทึกการรักษา 3 รายการพร้อมเวลาที่รัดจริง',
+    case when n = 3 then 'PASS' else 'FAIL' end, n || ' แถว');
+
+  -- ชื่อรายการว่างต้องไม่กลายเป็นแถวขยะ
+  select count(*) into n from public.property_item where case_id = r.case_id;
+  insert into public._form_result values (32,
+    'M3 บัญชีสิ่งของข้ามแถวที่ไม่มีชื่อรายการ',
+    case when n = 1 then 'PASS' else 'FAIL' end, n || ' แถว (ส่งไป 2 แถว)');
+
+  -- ── M4 given_at ของสายรัดต้องเป็นเวลาที่ส่งมา ไม่ใช่เวลาที่กดปุ่ม ──
+  select extract(epoch from (now() - given_at))::int into n
+  from public.treatment
+  where case_id = r.case_id and tx_code = 'tourniquet'
+  order by given_at limit 1;
+  insert into public._form_result values (33,
+    'M4 ★ เวลาที่รัดสายห้ามเลือดเก็บตามที่กรอก ไม่ใช่เวลาที่กดปุ่ม',
+    case when n between 2400 and 2520 then 'PASS' else 'FAIL' end,
+    'ผ่านมาแล้ว ' || n || ' วินาที (ต้องราว 2460)');
+
+  -- ── M5 given_by ต้องเป็นผู้เรียก ไม่ใช่ค่าที่ client ส่งมา ──
+  select count(*) into n from public.treatment
+  where case_id = r.case_id and given_by <> auth.uid();
+  insert into public._form_result values (34,
+    'M5 given_by บังคับเป็นผู้เรียกเสมอ',
+    case when n = 0 then 'PASS' else 'FAIL' end, n || ' แถวที่ไม่ตรง');
+
+  -- ── M6 injury_sites กับ protective_gear ลงจริง ──
+  select count(*) into n from public."case"
+  where id = r.case_id
+    and jsonb_array_length(injury_sites) = 1
+    and jsonb_array_length(protective_gear) = 2;
+  insert into public._form_result values (35,
+    'M6 ตำแหน่งบาดเจ็บและอุปกรณ์ป้องกันลงเป็น array',
+    case when n = 1 then 'PASS' else 'FAIL' end, n || '');
+
+  -- ── M7 pickup_grid ที่กรอกเองต้องชนะจุดที่เลือกจากรายการ ──
+  select pickup_grid into v_txt from public."case" where id = r.case_id;
+  insert into public._form_result values (36,
+    'M7 พิกัดที่กรอกเองถูกบันทึก',
+    case when v_txt = 'QA 114 882' then 'PASS' else 'FAIL' end, coalesce(v_txt, 'null'));
+
+  -- ── M8 เวลาที่ให้การรักษาในอนาคตต้องถูกปฏิเสธ ──
+  begin
+    perform public.create_evac_request(
+      p_precedence      => 'routine',
+      p_chief_complaint => 'ทดสอบเวลาอนาคต',
+      p_to_unit_id      => u_hosp,
+      p_treatments      => jsonb_build_array(jsonb_build_object(
+                             'tx_code','tourniquet','site','แขนขวา',
+                             'given_at', (now() + interval '2 hours')::text))
+    );
+    insert into public._form_result values (37,
+      'M8 ปฏิเสธเวลาที่ให้การรักษาที่อยู่ในอนาคต', 'FAIL', 'ผ่านเข้าไปได้');
+  exception when others then
+    insert into public._form_result values (37,
+      'M8 ปฏิเสธเวลาที่ให้การรักษาที่อยู่ในอนาคต', 'PASS', 'ถูกปฏิเสธถูกต้อง');
+  end;
+
+  -- ── M9 ความเร่งด่วน died ตั้งสี triage เป็นดำเอง ──
+  select * into r from public.create_evac_request(
+    p_precedence      => 'died',
+    p_chief_complaint => 'ทดสอบผู้เสียชีวิต',
+    p_to_unit_id      => u_hosp
+  );
+  select triage::text into v_txt from public."case" where id = r.case_id;
+  insert into public._form_result values (38,
+    'M9 ★ ความเร่งด่วน died ตั้ง triage เป็น black อัตโนมัติ',
+    case when v_txt = 'black' then 'PASS' else 'FAIL' end, coalesce(v_txt, 'null'));
+
+  -- ── M10 เลขประจำตัวผิดรูปแบบต้องถูกปฏิเสธ ──
+  begin
+    perform public.create_evac_request(
+      p_precedence      => 'routine',
+      p_chief_complaint => 'ทดสอบเลขประจำตัว',
+      p_to_unit_id      => u_hosp,
+      p_casualty        => jsonb_build_object('service_number', '1234567890123')
+    );
+    insert into public._form_result values (39,
+      'M10 ★ ปฏิเสธเลขประจำตัว 13 หลัก (เลขบัตรประชาชน)', 'FAIL', 'ผ่านเข้าไปได้');
+  exception when check_violation then
+    insert into public._form_result values (39,
+      'M10 ★ ปฏิเสธเลขประจำตัว 13 หลัก (เลขบัตรประชาชน)', 'PASS', 'ถูกปฏิเสธถูกต้อง');
+  end;
+
+  -- ── M11 ส่ง p_casualty ที่ไม่มีค่าจริง ต้องไม่สร้างแถวเปล่า ──
+  select * into r from public.create_evac_request(
+    p_precedence      => 'routine',
+    p_chief_complaint => 'ทดสอบประวัติว่าง',
+    p_to_unit_id      => u_hosp,
+    p_casualty        => '{"nationality": null}'::jsonb
+  );
+  select count(*) into n from public.casualty where case_id = r.case_id;
+  insert into public._form_result values (40,
+    'M11 ไม่สร้างแถวประวัติเปล่าเมื่อไม่มีช่องไหนมีค่า',
+    case when n = 0 then 'PASS' else 'FAIL' end, n || ' แถว');
+end $$;
+
+-- =============================================================
+-- N — สายรัดห้ามเลือดเดินทางไปกับผู้ป่วย
+--     คนละหน่วยกับผู้รัดต้องกดคลายได้ และคลายได้ครั้งเดียว
+-- =============================================================
+do $$
+declare
+  u_hosp uuid := (select id from public.unit where code = 'DEMO-HOSP');
+  r      record;
+  tq     uuid;
+  n      int;
+begin
+  select * into r from public.create_evac_request(
+    p_precedence      => 'urgent',
+    p_chief_complaint => 'ทดสอบสายรัด N',
+    p_to_unit_id      => u_hosp,
+    p_treatments      => jsonb_build_array(jsonb_build_object(
+                           'tx_code','tourniquet','site','ต้นขาซ้าย'))
+  );
+  select id into tq from public.treatment
+  where case_id = r.case_id and tx_code = 'tourniquet';
+
+  -- สลับเป็นผู้ใช้ปลายทาง (คนละหน่วย ไม่ใช่คนที่รัด)
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', (select p3::text from public._who), 'role', 'authenticated')::text, true);
+
+  select count(*) into n from public.treatment where id = tq;
+  insert into public._form_result values (41,
+    'N1 ★ ผู้รับปลายทางคนละหน่วยมองเห็นสายรัดของเคสนี้',
+    case when n = 1 then 'PASS' else 'FAIL' end, n || ' แถว');
+
+  update public.treatment
+     set tourniquet_off = now(), released_by = auth.uid()
+   where id = tq;
+
+  select count(*) into n from public.treatment
+  where id = tq and tourniquet_off is not null;
+  insert into public._form_result values (42,
+    'N2 ★ ผู้รับปลายทางกดคลายสายรัดได้ แม้ไม่ใช่ผู้รัด',
+    case when n = 1 then 'PASS' else 'FAIL' end, n || ' แถวที่คลายแล้ว');
+
+  -- คลายซ้ำต้องไม่มีผลใดๆ เพราะ policy บังคับ tourniquet_off is null ใน using
+  update public.treatment
+     set tourniquet_off = now() + interval '1 hour', released_by = auth.uid()
+   where id = tq;
+  get diagnostics n = row_count;
+  insert into public._form_result values (43,
+    'N3 ★ คลายซ้ำครั้งที่สองไม่มีผล ปิดแล้วปิดเลย',
+    case when n = 0 then 'PASS' else 'FAIL' end, n || ' แถวถูกแก้');
+end $$;
+
+reset role;
 
 reset role;
 

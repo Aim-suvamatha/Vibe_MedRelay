@@ -3,6 +3,7 @@ import { LegSection } from "@/components/medrelay/leg-list";
 import { NoAccessNotice } from "@/components/medrelay/no-access";
 import { getProfile, hasAnyRole } from "@/lib/auth/profile";
 import { getMyTransportLegs } from "@/lib/leg-queries";
+import { getTourniquetsByCase } from "@/lib/tourniquet";
 
 /**
  * หน้า /transporter — ภารกิจของชุดลำเลียง (F3 · Prompt 08)
@@ -37,6 +38,15 @@ export default async function Page() {
 
   const { open, done } = await getMyTransportLegs(profile.id);
 
+  /**
+   * สายรัดห้ามเลือดเดินทางไปกับผู้ป่วย ไม่ได้ค้างอยู่ที่หน้าของคนที่รัด
+   * คนที่กำลังลำเลียงอยู่คือคนที่ต้องเห็นนาฬิกาขาดเลือด ณ ตอนนั้น
+   * (policy treatment_select ใช้ can_see_case() จึงไม่ต้องกรองสิทธิ์ที่นี่)
+   */
+  const tourniquets = await getTourniquetsByCase(
+    [...open, ...done].map((l) => l.caseId),
+  );
+
   return (
     <>
       <AppHeader
@@ -49,12 +59,14 @@ export default async function Page() {
             title="ภารกิจที่ต้องทำต่อ"
             emptyText="ยังไม่มีภารกิจที่จ่ายให้คุณ — ศูนย์สั่งการจะจ่ายรถและผู้ลำเลียงเมื่อมีคำขอเข้ามา"
             legs={open}
+            tourniquets={tourniquets}
           />
 
           <LegSection
             title="ส่งมอบไปแล้วล่าสุด"
             emptyText="ยังไม่มีภารกิจที่คุณส่งมอบเสร็จ"
             legs={done}
+            tourniquets={tourniquets}
           />
         </div>
       </AppShell>

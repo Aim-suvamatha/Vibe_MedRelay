@@ -2,9 +2,11 @@ import Link from "next/link";
 
 import { PrecedenceBadge } from "@/components/medrelay/precedence-badge";
 import { RelativeTime } from "@/components/medrelay/relative-time";
+import { TourniquetStrip } from "@/components/medrelay/tourniquet-strip";
 import { TriageDot } from "@/components/medrelay/triage-dot";
 import { LEG_STATUS_LABEL, nextStep } from "@/lib/leg-flow";
 import type { LegListItem } from "@/lib/leg-queries";
+import type { TourniquetItem } from "@/lib/tourniquet";
 import { cn } from "@/lib/utils";
 
 /**
@@ -19,15 +21,25 @@ import { cn } from "@/lib/utils";
  *
  * ★ ไม่พึ่งสีอย่างเดียว — ทุกการ์ดมีทั้งรูปทรง (TriageDot) ข้อความ (PrecedenceBadge)
  *   และคำบอกสถานะเป็นตัวอักษร ตามข้อกำหนดใน /design หัวข้อ 6
+ *
+ * ★ แถบสายรัดห้ามเลือดบนการ์ดเป็นแบบย่อ ไม่มีปุ่มคลาย
+ *   ไม่ใช่เพราะไม่อยากให้กด แต่เพราะการ์ดทั้งใบเป็น <a> อยู่แล้ว
+ *   การวาง <form> ซ้อนใน <a> เป็น HTML ที่ไม่ถูกต้อง และเบราว์เซอร์แต่ละตัว
+ *   จัดการต่างกันจนกดแล้วได้ผลไม่เหมือนกัน
+ *   ปุ่มคลายตัวจริงอยู่ที่ /track/[caseId] ซึ่งกดจากการ์ดนี้ไปถึงได้ในหนึ่งครั้ง
+ *   บนการ์ดจึงบอกแค่ว่ามีกี่เส้นและรัดมานานแค่ไหน ซึ่งเป็นสิ่งที่ต้องเห็นตอนกวาดตา
  */
 
 export function LegCardLink({
   leg,
   /** แสดงชื่อผู้ลำเลียงด้วย — ใช้ในหน้าศูนย์สั่งการที่ต้องรู้ว่าใครถือทอดนี้ */
   showTransporter = false,
+  tourniquets = [],
 }: {
   leg: LegListItem;
   showTransporter?: boolean;
+  /** สายรัดห้ามเลือดของเคสนี้ — ว่างได้ แถบจะไม่ถูกวาดเลย */
+  tourniquets?: readonly TourniquetItem[];
 }) {
   const next = nextStep(leg.status);
   const waiting = leg.status === "pending";
@@ -55,7 +67,8 @@ export function LegCardLink({
         </p>
 
         <p className="mt-1 text-sm text-muted-foreground">
-          {leg.patientAlias ?? "ไม่ระบุนามสมมติ"}
+          {leg.patientName ?? leg.patientAlias ?? "ยังไม่ได้บันทึกชื่อ"}
+          {leg.patientAffiliation && ` · ${leg.patientAffiliation}`}
           {leg.patientCount > 1 && ` · ${leg.patientCount} ราย`}
         </p>
 
@@ -85,6 +98,8 @@ export function LegCardLink({
             />
           </span>
         </div>
+
+        <TourniquetStrip items={tourniquets} returnTo="/" compact className="mt-3" />
       </Link>
     </li>
   );
@@ -102,11 +117,14 @@ export function LegSection({
   emptyText,
   legs,
   showTransporter = false,
+  tourniquets,
 }: {
   title: string;
   emptyText: string;
   legs: LegListItem[];
   showTransporter?: boolean;
+  /** map จาก caseId ไปสายรัดของเคสนั้น — หน้าที่เรียกเป็นคนดึงมาให้ */
+  tourniquets?: Map<string, TourniquetItem[]>;
 }) {
   return (
     <section>
@@ -130,6 +148,7 @@ export function LegSection({
               key={leg.id}
               leg={leg}
               showTransporter={showTransporter}
+              tourniquets={tourniquets?.get(leg.caseId) ?? []}
             />
           ))}
         </ul>

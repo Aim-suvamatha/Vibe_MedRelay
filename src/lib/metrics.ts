@@ -49,6 +49,7 @@ const EMPTY_PRECEDENCE: Record<PrecedenceLevel, number> = {
   urgent: 0,
   priority: 0,
   routine: 0,
+  died: 0,
 };
 
 const EMPTY_TRIAGE: Record<TriageColor | "unknown", number> = {
@@ -78,28 +79,44 @@ export async function getMetrics(): Promise<Metrics> {
     await Promise.all([
       supabase
         .from("v_leg_metrics")
-        .select("request_to_dispatch_sec, leg_total_sec"),
+        .select("request_to_dispatch_sec, leg_total_sec, precedence"),
       supabase.from("case").select("status, precedence, triage, requested_at"),
       supabase
         .from("v_case_metrics")
-        .select("total_evacuation_sec, status")
+        .select("total_evacuation_sec, status, precedence")
         .eq("status", "completed"),
     ]);
 
   const legRows = legs ?? [];
   const caseRows = cases ?? [];
 
+  /**
+   * ★ เคสผู้เสียชีวิตไม่เข้าค่ามัธยฐานเวลา
+   *
+   * precedence = 'died' เพิ่มเข้ามาใน 0018 เพราะฟอร์มรวมช่อง triage เข้ากับปุ่มความเร่งด่วน
+   * แต่ผู้เสียชีวิตไม่ได้เร่งรถ เวลาส่งกลับจึงยาวกว่าปกติโดยธรรมชาติ
+   * ถ้านับรวม ตัวเลข "เวลาจากร้องขอถึงส่งมอบ" จะดูแย่ลงทั้งที่ระบบทำงานปกติ
+   * ซึ่งเป็นตัวเลขที่โครงการเอาไปอ้าง จึงต้องสะท้อนเฉพาะเคสที่ระบบพยายามเร่งจริง
+   *
+   * ยังนับรวมใน byPrecedence และ caseTotal ตามปกติ — ยอดต้องครบเสมอ
+   * ที่กันออกคือค่ามัธยฐานเท่านั้น
+   */
+  const timedLegs = legRows.filter((l) => l.precedence !== "died");
+
   const medianWaitSec = median(
-    legRows
+    timedLegs
       .map((l) => Number(l.request_to_dispatch_sec))
       .filter((n) => Number.isFinite(n)),
   );
 
   const medianLegTotalSec = median(
-    legRows.map((l) => Number(l.leg_total_sec)).filter((n) => Number.isFinite(n)),
+    timedLegs
+      .map((l) => Number(l.leg_total_sec))
+      .filter((n) => Number.isFinite(n)),
   );
 
   const caseSecs = (caseMetrics ?? [])
+    .filter((c) => c.precedence !== "died")
     .map((c) => Number(c.total_evacuation_sec))
     .filter((n) => Number.isFinite(n));
 
@@ -133,7 +150,7 @@ export async function getMetrics(): Promise<Metrics> {
     medianWaitSec,
     medianLegTotalSec,
     medianCaseTotalSec: median(caseSecs),
-    legSampleSize: legRows.length,
+    legSampleSize: timedLegs.length,
     caseSampleSize: caseSecs.length,
     byPrecedence,
     byTriage,

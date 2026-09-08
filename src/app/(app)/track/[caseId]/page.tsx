@@ -4,9 +4,11 @@ import { notFound } from "next/navigation";
 import { AppHeader, AppShell } from "@/components/medrelay/app-shell";
 import { PrecedenceBadge } from "@/components/medrelay/precedence-badge";
 import { RelativeTime } from "@/components/medrelay/relative-time";
+import { TourniquetStrip } from "@/components/medrelay/tourniquet-strip";
 import { TriageChip } from "@/components/medrelay/triage-dot";
 import { getProfile } from "@/lib/auth/profile";
 import { createClient } from "@/lib/supabase/server";
+import { getTourniquets } from "@/lib/tourniquet";
 import type {
   AvpuLevel,
   CaseStatus,
@@ -193,6 +195,13 @@ export default async function Page({
    * ทั้งสอง query ผ่าน RLS ปกติ — บัญชีที่ไม่ใช่ศูนย์สั่งการจะเห็นแค่ของหน่วยตัวเอง
    * หรือไม่เห็นเลย ซึ่งฟอร์มจะขึ้นข้อความบอกแทนที่จะเป็น dropdown ว่าง
    */
+  /**
+   * สายรัดห้ามเลือดของเคสนี้ — หน้านี้เป็นที่เดียวที่มีปุ่มคลาย
+   * เพราะการ์ดในหน้ารายการเป็น <a> ทั้งใบ วาง <form> ซ้อนใน <a> ไม่ได้
+   * และทุกบทบาทเดินทางมาถึงหน้านี้ได้ในหนึ่งครั้งจากการ์ดของตัวเอง
+   */
+  const tourniquets = await getTourniquets(caseId);
+
   const needsDispatch = rawLegs.some((l) => l.status === "pending");
 
   let vehicles: VehicleOption[] = [];
@@ -286,6 +295,21 @@ export default async function Page({
               )}
             </p>
           </div>
+
+          {/*
+            สายรัดห้ามเลือดอยู่เหนือทุกอย่าง ใต้แบนเนอร์สถานะ
+            เพราะเป็นข้อมูลเดียวในหน้านี้ที่มีนาฬิกาเดินอยู่และมีเส้นตายทางคลินิก
+            ทุกคนที่เห็นเคสกดคลายได้ ไม่จำกัดว่าต้องเป็นคนที่รัด (policy treatment_release)
+          */}
+          {tourniquets.length > 0 && (
+            <section className="rounded-xl border border-border bg-card p-4">
+              <TourniquetStrip
+                items={tourniquets}
+                returnTo={`/track/${caseId}`}
+                className="border-t-0 pt-0"
+              />
+            </section>
+          )}
 
           <section className="space-y-3 rounded-xl border border-border bg-card p-4">
             <div className="flex flex-wrap items-center gap-2">

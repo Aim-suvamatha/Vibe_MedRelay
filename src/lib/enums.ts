@@ -8,7 +8,14 @@
  * ถ้าแก้ 0001_enums.sql ต้องแก้ไฟล์นี้ให้ตรงกันด้วย
  */
 
-export type PrecedenceLevel = "urgent" | "priority" | "routine";
+/**
+ * ★ "died" เป็นค่าที่สี่ที่เพิ่มใน 0018 (การตัดสินใจของเจ้าของโครงการ 8 ก.ย. 2569)
+ *   มันไม่ใช่ "ความเร่งด่วน" ในความหมายเดียวกับอีกสามค่า — ผู้เสียชีวิตยังต้องส่งกลับ
+ *   แต่ไม่ได้เร่งรถ เวลาส่งกลับจึงยาวกว่าปกติโดยธรรมชาติ
+ *   src/lib/metrics.ts จึงกันเคสนี้ออกจากค่ามัธยฐานเวลา ไม่งั้นตัวเลขบนแดชบอร์ด
+ *   จะดูแย่ลงทั้งที่ระบบทำงานปกติ
+ */
+export type PrecedenceLevel = "urgent" | "priority" | "routine" | "died";
 
 export type TriageColor = "black" | "red" | "yellow" | "green";
 
@@ -108,4 +115,43 @@ export type TxCode =
   | "analgesic"
   | "antibiotic"
   | "txa"
+  // เพิ่มใน 0018 — ช่อง ๒๒–๒๓ ของ ทบ.466-901 และช่อง "เลือดให้" ในตารางเฝ้าระวัง
+  | "tetanus_serum"
+  | "tetanus_toxoid"
+  | "blood_product"
   | "other";
+
+/* -------------------------------------------------------------
+ * enum ที่เพิ่มใน 0018_form_enums_v2.sql
+ * ----------------------------------------------------------- */
+
+/** เหล่าทัพ (ทบ.466-901 ช่อง ๔) */
+export type ArmedBranch =
+  | "army"
+  | "navy"
+  | "air_force"
+  | "police"
+  | "civilian"
+  | "other";
+
+/** หมู่โลหิตและ Rh แยกกันเพราะกระดาษก็แยกเป็นสองบรรทัด และ Rh อาจทราบทีหลัง */
+export type BloodGroup = "O" | "A" | "B" | "AB";
+export type RhFactor = "positive" | "negative";
+
+/** ประเภทผู้ป่วย — หยาบกว่า ReportCategory โดยเจตนา เพราะหน้างานต้องเลือกได้ในหนึ่งวินาที */
+export type PatientCategory = "combat" | "admin" | "other";
+
+/** สามแถวติ๊กมุมบนขวาของ ทบ.466-901 ด้านหลัง — เป็นสภาพ ไม่ใช่รายการหัตถการ */
+export type AirwayStatus =
+  | "normal"
+  | "oral_airway"
+  | "nasal_airway"
+  | "cricothyrotomy";
+
+export type ChestStatus =
+  | "normal"
+  | "occlusive_dressing"
+  | "needle_decompression"
+  | "chest_tube";
+
+export type WoundStatus = "normal" | "dressing" | "tourniquet" | "windlass";
