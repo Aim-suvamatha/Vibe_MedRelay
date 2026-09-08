@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@0.0.80",
+        "--browser", "chromium",
+        "--viewport-size", "390,844",
+        "--allowed-origins", "localhost:3000;127.0.0.1:3000"
+      ]
+    }
+  }
+}

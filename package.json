@@ -10,7 +10,11 @@
     "typecheck": "tsc --noEmit",
     "db:test": "node supabase/tests/local/run.mjs",
     "demo:reset": "node supabase/scripts/sql.mjs supabase/reset-demo.sql",
-    "test:unit": "node --test src/lib/duration.test.ts"
+    "test:unit": "node --test src/lib/duration.test.ts",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui",
+    "e2e:report": "playwright show-report",
+    "shot": "node scripts/shot.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.6",
@@ -31,6 +35,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
