@@ -45,7 +45,11 @@ from (values
   ('DEMO-02', 'bls',     'DEMO-BN-A', 'available',  'พลขับ 1 · พลเปล 2'),
   ('DEMO-03', 'bls',     'DEMO-BN-B', 'available',  'พลขับ 1 · พลเปล 2'),
   ('DEMO-04', 'als',     'DEMO-BDE',  'maintenance','อยู่ระหว่างซ่อมบำรุง'),
-  ('DEMO-05', 'utility', 'DEMO-BDE',  'available',  'รถอเนกประสงค์ ใช้เมื่อรถพยาบาลไม่พอ')
+  ('DEMO-05', 'utility', 'DEMO-BDE',  'available',  'รถอเนกประสงค์ ใช้เมื่อรถพยาบาลไม่พอ'),
+  -- ที่พยาบาลกองพันมีรถมากกว่าหนึ่งคันเสมอในหน่วยจริง และการมีรถว่างคันเดียว
+  -- ทำให้ทั้งการสาธิตและชุดทดสอบแย่งรถกันจนติดขัด (เจอ 8 ก.ย. 2569)
+  ('DEMO-06', 'bls',     'DEMO-BN-A', 'available',  'พลขับ 1 · พลเปล 2'),
+  ('DEMO-07', 'als',     'DEMO-BN-A', 'available',  'พลขับ 1 · นายสิบพยาบาล 1 · พลเปล 2')
 ) as v(call_sign, type, unit_code, status, crew_note)
 join public.unit u on u.code = v.unit_code
 on conflict (call_sign) do nothing;

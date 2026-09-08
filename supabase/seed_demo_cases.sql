@@ -77,7 +77,8 @@ begin
     insert into public.transfer_leg
       (case_id, leg_no, from_unit_id, to_unit_id, role_level, vehicle_id,
        transporter_id, receiver_id, evac_director, status,
-       requested_at, dispatched_at, on_scene_at, departed_at, arrived_at, handover_at)
+       requested_at, dispatched_at, on_scene_at, departed_at, arrived_at, handover_at,
+       handover_ready_at, handover_ready_by)
     values
       (c_id, 1, u_bna, u_bde, 'role_2', v_als, p_trans, p_recv, 'นายแพทย์สมมติ', 'completed',
        t0,
@@ -85,7 +86,11 @@ begin
        t0 + make_interval(mins => r.m_disp + r.m_scene),
        t0 + make_interval(mins => r.m_disp + r.m_scene + 3),
        t0 + make_interval(mins => r.m_disp + r.m_scene + 3 + r.m_transit),
-       t0 + make_interval(mins => r.m_disp + r.m_scene + 3 + r.m_transit + r.m_hand));
+       t0 + make_interval(mins => r.m_disp + r.m_scene + 3 + r.m_transit + r.m_hand),
+       -- ตั้งแต่ 0022 ส่งมอบต้องกดสองฝ่าย เคสจำลองจึงต้องมีรอยของฝ่ายแรกด้วย
+       -- ใช้เวลาเดียวกับ handover_at เพื่อไม่ให้ชนขอบล่างเมื่อ m_hand สั้นมาก
+       t0 + make_interval(mins => r.m_disp + r.m_scene + 3 + r.m_transit + r.m_hand),
+       p_trans);
 
     l1_hand := t0 + make_interval(mins => r.m_disp + r.m_scene + 3 + r.m_transit + r.m_hand);
 
@@ -94,7 +99,8 @@ begin
       insert into public.transfer_leg
         (case_id, leg_no, from_unit_id, to_unit_id, role_level, vehicle_id,
          transporter_id, receiver_id, evac_director, status,
-         requested_at, dispatched_at, on_scene_at, departed_at, arrived_at, handover_at)
+         requested_at, dispatched_at, on_scene_at, departed_at, arrived_at, handover_at,
+         handover_ready_at, handover_ready_by)
       values
         (c_id, 2, u_bde, u_hosp, 'role_3', v_bls, p_trans, p_recv, 'นายแพทย์สมมติ', 'completed',
          l1_hand,
@@ -102,7 +108,9 @@ begin
          l1_hand + interval '20 minutes',
          l1_hand + interval '24 minutes',
          l1_hand + interval '58 minutes',
-         l1_hand + interval '66 minutes');
+         l1_hand + interval '66 minutes',
+         l1_hand + interval '64 minutes',
+         p_trans);
       l1_hand := l1_hand + interval '66 minutes';
     end if;
 

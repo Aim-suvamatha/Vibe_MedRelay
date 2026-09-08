@@ -6,9 +6,20 @@ import { useFormStatus } from "react-dom";
 import { RelativeTime } from "@/components/medrelay/relative-time";
 import { RoleGate } from "@/components/medrelay/role-gate";
 import type { LegStatus } from "@/lib/enums";
-import { LEG_FLOW, LEG_STATUS_LABEL, nextStep, stepIndex } from "@/lib/leg-flow";
+import {
+  HANDOVER_CONFIRM_ROLES,
+  LEG_FLOW,
+  LEG_STATUS_LABEL,
+  nextStep,
+  stepIndex,
+} from "@/lib/leg-flow";
 import { cn } from "@/lib/utils";
-import { advanceLeg, dispatchLeg, type LegActionState } from "./actions";
+import {
+  advanceLeg,
+  dispatchLeg,
+  offerHandover,
+  type LegActionState,
+} from "./actions";
 
 /**
  * การ์ดหนึ่งทอด — เส้นเวลา 6 ขั้น + ปุ่มของขั้นถัดไปหนึ่งปุ่ม (F3 · Prompt 08)
@@ -33,6 +44,21 @@ export type LegView = {
   transporter: string | null;
   receiver: string | null;
   times: Partial<Record<(typeof LEG_FLOW)[number]["timeKey"], string | null>>;
+  /**
+   * ผู้ใช้ที่กำลังดูอยู่ "คือ" ผู้ลำเลียงที่ถูกจ่ายทอดนี้หรือไม่ (0023)
+   *
+   * ★ ต้องเป็นธงที่คิดฝั่ง server ไม่ใช่เช็คบทบาทบน browser
+   *   บัญชีสาธิต 9900000001 ถือทั้ง sender · transporter · receiver
+   *   การกันด้วย RoleGate roles={["transporter"]} จึงปล่อยเขาผ่านทุกครั้ง
+   *   ทั้งที่ทอดถูกจ่ายให้คนอื่นไปแล้ว — เจ้าของโครงการเจอเอง 8 ก.ย. 2569
+   */
+  isAssignedTransporter: boolean;
+  /** ผู้ใช้สังกัดหน่วยปลายทางของทอดนี้หรือไม่ — ใช้กับปุ่มยืนยันรับมอบ */
+  isDestinationUnit: boolean;
+  /** เวลาที่ชุดลำเลียงกดส่งมอบ — null = ยังไม่มีใครกด (0022) */
+  handoverReadyAt: string | null;
+  /** ชื่อผู้กดส่งมอบฝ่ายแรก */
+  handoverReadyBy: string | null;
   docsOk: boolean | null;
   propertyOk: boolean | null;
   missingNote: string | null;
@@ -262,7 +288,7 @@ function DispatchForm({
  * ----------------------------------------------------------- */
 function HandoverForm({ leg }: { leg: LegView }) {
   const [state, formAction] = useActionState<LegActionState, FormData>(
-    advanceLeg,
+    offerHandover,
     {},
   );
   const id = useId();
@@ -273,7 +299,6 @@ function HandoverForm({ leg }: { leg: LegView }) {
   return (
     <form action={formAction} className="space-y-3">
       <input type="hidden" name="legId" value={leg.id} />
-      <input type="hidden" name="target" value="completed" />
 
       <fieldset className="space-y-2">
         <legend className="mb-2 text-sm font-semibold">
@@ -328,6 +353,31 @@ function HandoverForm({ leg }: { leg: LegView }) {
 
       <ErrorNote message={state.error} />
       <SubmitButton>ส่งมอบผู้ป่วย</SubmitButton>
+      <p className="text-center text-xs text-muted-foreground">
+        กดแล้วทอดยังไม่ปิด — ผู้รับปลายทางต้องกดยืนยันอีกครั้ง
+      </p>
+    </form>
+  );
+}
+
+/* -------------------------------------------------------------
+ * ยืนยันรับมอบ — ฝ่ายที่สองของการส่งมอบ (0022)
+ *
+ * ★ ปุ่มนี้คือปุ่มเดียวที่ปิดทอดได้ และกดได้ก็ต่อเมื่อฝ่ายแรกกดแล้ว
+ *   constraint leg_time_order บังคับลำดับนี้ที่ฐานข้อมูลอีกชั้น
+ * ----------------------------------------------------------- */
+function ConfirmHandoverForm({ leg }: { leg: LegView }) {
+  const [state, formAction] = useActionState<LegActionState, FormData>(
+    advanceLeg,
+    {},
+  );
+
+  return (
+    <form action={formAction} className="space-y-3">
+      <input type="hidden" name="legId" value={leg.id} />
+      <input type="hidden" name="target" value="completed" />
+      <ErrorNote message={state.error} />
+      <SubmitButton>ยืนยันรับมอบผู้ป่วย</SubmitButton>
     </form>
   );
 }
@@ -457,13 +507,14 @@ export function LegCard({
           </div>
         )}
 
-        {/* ปุ่มของขั้นถัดไป — ขั้นเดียวเท่านั้น */}
+        {/* ปุ่มของขั้นถัดไป — ขั้นเดียวเท่านั้น
+            บทบาทที่กดได้อ่านจาก next.roles ใน leg-flow.ts ไม่เขียนซ้ำที่นี่ */}
         {next?.status === "dispatched" && (
           <RoleGate
-            roles={["monitor"]}
+            roles={next.roles}
             fallback={
               <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                รอศูนย์สั่งการจัดรถ
+                รอชุดลำเลียงหรือศูนย์สั่งการจัดรถ
               </p>
             }
           >
@@ -476,10 +527,53 @@ export function LegCard({
         )}
 
         {next && next.status !== "dispatched" && next.status !== "completed" && (
-          <AdvanceForm leg={leg} target={next.status} label={next.action} />
+          /* ทอดที่จ่ายไปแล้วเป็นของผู้ลำเลียงคนนั้นคนเดียว ไม่ใช่ของทุกคนที่มีบทบาท transporter */
+          leg.isAssignedTransporter ? (
+            <AdvanceForm leg={leg} target={next.status} label={next.action} />
+          ) : (
+            <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              รอ{leg.transporter ?? next.actor}กด “{next.action}”
+            </p>
+          )
         )}
 
-        {next?.status === "completed" && <HandoverForm leg={leg} />}
+        {/* ส่งมอบสองฝ่าย — ฝ่ายแรกยังไม่กด จึงยังไม่มีปุ่มยืนยันให้ผู้รับ */}
+        {next?.status === "completed" && !leg.handoverReadyAt && (
+          leg.isAssignedTransporter ? (
+            <HandoverForm leg={leg} />
+          ) : (
+            <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              รอ{leg.transporter ?? "ชุดลำเลียง"}กดส่งมอบผู้ป่วย
+            </p>
+          )
+        )}
+
+        {next?.status === "completed" && leg.handoverReadyAt && (
+          <div className="space-y-3">
+            <p className="rounded-lg border border-triage-green bg-emerald-50 px-3 py-2 text-sm">
+              <span className="font-semibold">ชุดลำเลียงส่งมอบแล้ว</span>
+              {leg.handoverReadyBy ? ` · ${leg.handoverReadyBy}` : ""}
+              {" · "}
+              <RelativeTime value={leg.handoverReadyAt} />
+            </p>
+            {leg.isDestinationUnit ? (
+              <RoleGate
+                roles={HANDOVER_CONFIRM_ROLES}
+                fallback={
+                  <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                    บัญชีของคุณอยู่หน่วยปลายทางแต่ไม่มีบทบาทผู้รับ
+                  </p>
+                }
+              >
+                <ConfirmHandoverForm leg={leg} />
+              </RoleGate>
+            ) : (
+              <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                รอผู้รับที่ {leg.toUnit} กดยืนยันรับมอบ ทอดจึงจะปิด
+              </p>
+            )}
+          </div>
+        )}
 
         {next && (
           <p className="text-center text-xs text-muted-foreground">

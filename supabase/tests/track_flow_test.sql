@@ -92,12 +92,27 @@ end $$;
 
 -- =============================================================
 -- K2 — sender กดจัดรถเองไม่ได้
---      policy leg_update ยอมเฉพาะผู้ถือทอด/หน่วยปลายทาง/monitor/admin
+--      policy leg_update ยอมเฉพาะผู้ถือทอด/หน่วยปลายทาง/transporter/monitor/admin
 --      sender สังกัด DEMO-BN-A ซึ่งเป็นต้นทาง ไม่ใช่ปลายทาง จึงไม่เข้าเงื่อนไขใด
 --
 --      ⚠ UPDATE ที่ไม่ผ่าน USING ของ policy จะ "แก้ 0 แถว" เงียบๆ ไม่ใช่ error
 --      จึงต้องวัดที่จำนวนแถวที่ถูกแก้ ไม่ใช่ที่การดัก exception
+--
+--      ⚠ ตั้งแต่ 0022 ต้องถอดบทบาท transporter ออกจากบัญชีสาธิตก่อนวัด
+--        9900000001 ถือทั้ง sender · transporter · receiver เพื่อให้สาธิตได้คนเดียว
+--        ถ้าวัดด้วยบัญชีนั้นตรงๆ ข้อนี้จะ "ผ่านเพราะบทบาทอื่น" ไม่ใช่เพราะกติกาของ sender
+--        คืนค่าเดิมทันทีหลังวัดเสร็จ (ทั้งไฟล์ rollback อยู่แล้ว แต่ข้อถัดไปยังใช้บัญชีนี้)
 -- =============================================================
+reset role;
+
+update public.profile set roles = '{sender}'
+ where id = (select p_send from public._track_ctx);
+
+select set_config('request.jwt.claims',
+  json_build_object('sub', (select p_send::text from public._track_ctx),
+                    'role', 'authenticated')::text, true);
+set local role authenticated;
+
 do $$
 declare
   ctx record;
@@ -118,6 +133,10 @@ begin
 end $$;
 
 reset role;
+
+-- คืนบทบาทเดิมให้บัญชีสาธิต
+update public.profile set roles = '{sender,transporter,receiver}'
+ where id = (select p_send from public._track_ctx);
 
 
 -- =============================================================
@@ -234,22 +253,59 @@ begin
           then 'PASS' else 'FAIL' end,
      'ครบ 5 เวลา ไม่มีค่าติดลบ');
 
-  -- K8 ส่งมอบพร้อมรายการตรวจ ทบ.466-903 (ปุ่ม "ส่งมอบผู้ป่วย")
+  -- K8 ฝ่ายแรกส่งมอบพร้อมรายการตรวจ ทบ.466-903 (ปุ่ม "ส่งมอบผู้ป่วย")
+  --    ตั้งแต่ 0022 การกดของชุดลำเลียงยัง "ไม่ปิดทอด" — รอผู้รับยืนยันก่อน
   update public.transfer_leg
-     set status = 'completed', docs_ok = true, property_ok = false,
+     set handover_ready_by = ctx.p_trans, docs_ok = true, property_ok = false,
          missing_note = 'ไม่มีบัตรส่งสิ่งของคนไข้ (ทดสอบ)'
    where id = ctx.leg1_id and status = 'arrived';
 
   select l.* into leg from public.transfer_leg l where l.id = ctx.leg1_id;
 
   insert into public._track_result values
-    (8, 'K8 ส่งมอบได้ · handover_at ตั้งโดย trigger · เก็บรายการตรวจครบ',
-     case when leg.status = 'completed'
-            and leg.handover_at is not null
-            and leg.handover_at >= leg.arrived_at
+    (8, 'K8 ชุดลำเลียงส่งมอบแล้ว · ทอดยังไม่ปิด · เก็บรายการตรวจครบ',
+     case when leg.status = 'arrived'
+            and leg.handover_ready_at is not null
+            and leg.handover_at is null
             and leg.docs_ok = true
             and leg.property_ok = false
             and leg.missing_note is not null
+          then 'PASS' else 'FAIL' end,
+     'ready=' || coalesce(leg.handover_ready_at::text, 'null')
+       || ' handover=' || coalesce(leg.handover_at::text, 'null'));
+end $$;
+
+reset role;
+
+
+-- =============================================================
+-- K8b — ผู้รับปลายทางยืนยันรับมอบ ทอดจึงปิด (0022 · ส่งมอบสองฝ่าย)
+--       ★ ข้อนี้คือหลักฐานว่ากติกา "ต้องกดทั้งสองฝ่าย" ทำงานที่ฐานข้อมูลจริง
+--         ไม่ใช่แค่ซ่อนปุ่มบนหน้าจอ
+-- =============================================================
+select set_config('request.jwt.claims',
+  json_build_object('sub', (select p_recv::text from public._track_ctx),
+                    'role', 'authenticated')::text, true);
+set local role authenticated;
+
+do $$
+declare
+  ctx record;
+  leg record;
+begin
+  select * into ctx from public._track_ctx;
+
+  update public.transfer_leg set status = 'completed'
+   where id = ctx.leg1_id and status = 'arrived';
+
+  select l.* into leg from public.transfer_leg l where l.id = ctx.leg1_id;
+
+  insert into public._track_result values
+    (108, 'K8b ★ ผู้รับยืนยันแล้วทอดปิด · handover_at ตั้งโดย trigger · หลังเวลาฝ่ายแรก',
+     case when leg.status = 'completed'
+            and leg.handover_at is not null
+            and leg.handover_at >= leg.handover_ready_at
+            and leg.handover_ready_by = ctx.p_trans
           then 'PASS' else 'FAIL' end,
      'handover_at=' || coalesce(leg.handover_at::text, 'null'));
 end $$;
@@ -411,6 +467,8 @@ begin
   update public.transfer_leg set status = 'on_scene'   where id = ctx.leg2_id;
   update public.transfer_leg set status = 'in_transit' where id = ctx.leg2_id;
   update public.transfer_leg set status = 'arrived'    where id = ctx.leg2_id;
+  -- 0022 · ต้องมีฝ่ายแรกลงชื่อก่อนจึงจะปิดทอดได้
+  update public.transfer_leg set handover_ready_by = ctx.p_trans where id = ctx.leg2_id;
   update public.transfer_leg set status = 'completed'  where id = ctx.leg2_id;
 
   select v.status into st from public.vehicle v where v.id = ctx.v_01;
@@ -450,6 +508,146 @@ begin
      case when st = 'maintenance' then 'PASS' else 'FAIL' end,
      'vehicle.status=' || coalesce(st::text, 'null'));
 end $$;
+
+
+-- =============================================================
+-- K17 — ★ ชุดลำเลียงจัดรถเองได้ (0022 · คำสั่งเจ้าของโครงการ)
+--       เดิม policy leg_update ยอมเฉพาะผู้ที่ถูกตั้งเป็น transporter_id แล้ว
+--       แต่ทอดที่ยัง pending มี transporter_id เป็น null เสมอ
+--       ชุดลำเลียงจึงจัดรถให้ตัวเองไม่ได้เลย ทั้งที่หน้างานจริงเขารู้ก่อนใคร
+--
+--       ใช้เคสใหม่แยกต่างหาก ไม่แตะ leg1 เพราะ K13 นับจำนวน event_log
+--       ของทอดนั้นไว้พอดี การเดินสถานะเพิ่มจะทำให้ข้อนั้นเพี้ยน
+-- =============================================================
+reset role;
+
+create table public._k17 (case_id uuid, leg_id uuid);
+alter table public._k17 disable row level security;
+grant all on public._k17 to public;
+
+do $$
+declare
+  ctx    record;
+  c2     uuid;
+  l_new  uuid;
+begin
+  select * into ctx from public._track_ctx;
+
+  insert into public."case"
+    (patient_alias, origin_unit_id, precedence, chief_complaint, created_by, is_synthetic)
+  values ('ผู้ป่วยทดสอบ K17', ctx.u_bn_a, 'urgent', 'ทดสอบสิทธิ์จัดรถของชุดลำเลียง',
+          ctx.p_send, true)
+  returning id into c2;
+
+  insert into public.transfer_leg
+    (case_id, leg_no, from_unit_id, to_unit_id, role_level)
+  values (c2, 1, ctx.u_bn_a, ctx.u_hosp, 'role_3')
+  returning id into l_new;
+
+  insert into public._k17 values (c2, l_new);
+end $$;
+
+-- 9900000002 ถือบทบาท transporter อย่างเดียว และยังไม่ถูกตั้งเป็น transporter_id ของทอดนี้
+-- สังกัด DEMO-BN-A ซึ่งเป็นต้นทาง ไม่ใช่ปลายทาง จึงไม่เข้าเงื่อนไขเดิมข้อใดเลย
+select set_config('request.jwt.claims',
+  json_build_object('sub', (select p_trans::text from public._track_ctx),
+                    'role', 'authenticated')::text, true);
+set local role authenticated;
+
+do $$
+declare
+  ctx   record;
+  k     record;
+  n     int;
+  st    public.leg_status;
+begin
+  select * into ctx from public._track_ctx;
+  select * into k from public._k17;
+
+  update public.transfer_leg
+     set status = 'dispatched',
+         vehicle_id = ctx.v_01,
+         transporter_id = ctx.p_trans
+   where id = k.leg_id and status = 'pending';
+  get diagnostics n = row_count;
+
+  select status into st from public.transfer_leg where id = k.leg_id;
+
+  insert into public._track_result values
+    (17, 'K17 ★ ชุดลำเลียงจัดรถเองได้ · ไม่ต้องรอศูนย์สั่งการ',
+     case when n = 1 and st = 'dispatched' then 'PASS' else 'FAIL' end,
+     'แก้ไป ' || n || ' แถว · status=' || coalesce(st::text, 'null'));
+end $$;
+
+reset role;
+
+
+-- =============================================================
+-- K18 — ★ ทอดที่จ่ายให้คนอื่นแล้ว transporter คนอื่นต้องกดไม่ได้ (0023)
+--       เจ้าของโครงการเจอเองว่า 0022 เปิดกว้างเกินไป
+--
+--       ใช้ 9900000001 ซึ่งถือบทบาท transporter ด้วย และเป็นคนเปิดเคส
+--       แต่ทอดถูกจ่ายให้ 9900000002 ไปแล้วใน K3 — เขาจึงต้องกดอะไรไม่ได้เลย
+-- =============================================================
+reset role;
+
+do $$
+declare
+  ctx record;
+  c3  uuid;
+  l5  uuid;
+begin
+  select * into ctx from public._track_ctx;
+
+  insert into public."case"
+    (patient_alias, origin_unit_id, precedence, chief_complaint, created_by, is_synthetic)
+  values ('ผู้ป่วยทดสอบ K18', ctx.u_bn_a, 'urgent', 'ทดสอบสิทธิ์หลังจ่ายทอด',
+          ctx.p_send, true)
+  returning id into c3;
+
+  -- จ่ายทอดให้ 9900000002 ไปแล้ว และเดินถึง on_scene
+  insert into public.transfer_leg
+    (case_id, leg_no, from_unit_id, to_unit_id, role_level, vehicle_id, transporter_id, status)
+  values (c3, 1, ctx.u_bn_a, ctx.u_hosp, 'role_3', ctx.v_01, ctx.p_trans, 'pending')
+  returning id into l5;
+
+  update public.transfer_leg set status = 'dispatched' where id = l5;
+  update public.transfer_leg set status = 'on_scene'   where id = l5;
+
+  create table public._k18 (leg_id uuid);
+  alter table public._k18 disable row level security;
+  grant all on public._k18 to public;
+  insert into public._k18 values (l5);
+end $$;
+
+-- สวมบทบาท 9900000001 (sender + transporter + receiver · หน่วยต้นทาง)
+select set_config('request.jwt.claims',
+  json_build_object('sub', (select p_send::text from public._track_ctx),
+                    'role', 'authenticated')::text, true);
+set local role authenticated;
+
+do $$
+declare
+  k   record;
+  n   int;
+  st  public.leg_status;
+begin
+  select * into k from public._k18;
+
+  -- พยายามเดินขั้นถัดไปของทอดที่ไม่ใช่ของตัวเอง
+  update public.transfer_leg set status = 'in_transit'
+   where id = k.leg_id and status = 'on_scene';
+  get diagnostics n = row_count;
+
+  select status into st from public.transfer_leg where id = k.leg_id;
+
+  insert into public._track_result values
+    (18, 'K18 ★ ทอดที่จ่ายให้คนอื่นแล้ว คนที่ไม่ได้ถือทอดกดไม่ได้ แม้มีบทบาท transporter',
+     case when n = 0 and st = 'on_scene' then 'PASS' else 'FAIL' end,
+     'แก้ไป ' || n || ' แถว · status=' || coalesce(st::text,'null'));
+end $$;
+
+reset role;
 
 
 -- =============================================================

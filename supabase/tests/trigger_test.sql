@@ -82,6 +82,8 @@ begin
   update public.transfer_leg set status = 'on_scene'   where id = l1;
   update public.transfer_leg set status = 'in_transit' where id = l1;
   update public.transfer_leg set status = 'arrived'    where id = l1;
+  -- 0022 · ส่งมอบต้องกดสองฝ่าย ฝ่ายแรก (ชุดลำเลียง) ลงชื่อก่อน
+  update public.transfer_leg set handover_ready_by = p_sender where id = l1;
   update public.transfer_leg set status = 'completed'  where id = l1;
 
   select dispatched_at, on_scene_at, departed_at, arrived_at, handover_at
@@ -134,6 +136,7 @@ begin
   update public.transfer_leg set status = 'on_scene'   where id = l2;
   update public.transfer_leg set status = 'in_transit' where id = l2;
   update public.transfer_leg set status = 'arrived'    where id = l2;
+  update public.transfer_leg set handover_ready_by = p_sender where id = l2;
   update public.transfer_leg set status = 'completed'  where id = l2;
 
   select status::text into c_status from public."case" where id = c_id;
@@ -174,6 +177,94 @@ begin
            case when skipped then 'PASS' else 'FAIL' end,
            case when skipped then 'database ปฏิเสธถูกต้อง'
                 else 'ข้ามขั้นได้ ตัวเลขแดชบอร์ดจะมีรูโหว่' end);
+  end;
+
+  -- ---------------------------------------------------------
+  -- 6.1 ส่งมอบสองฝ่าย (0022) — ฝ่ายเดียวปิดทอดไม่ได้
+  --     นี่คือด่านที่หน้าจอพึ่งไม่ได้ ต่อให้ยิง POST ตรงเข้ามาก็ต้องถูกปฏิเสธ
+  -- ---------------------------------------------------------
+  declare
+    l4       uuid;
+    blocked  boolean := false;
+    ready_at timestamptz;
+  begin
+    insert into public.transfer_leg (case_id, leg_no, from_unit_id, to_unit_id, role_level)
+    values (c_id, 4, u_a, u_c, 'role_3') returning id into l4;
+
+    update public.transfer_leg set status = 'dispatched' where id = l4;
+    update public.transfer_leg set status = 'on_scene'   where id = l4;
+    update public.transfer_leg set status = 'in_transit' where id = l4;
+    update public.transfer_leg set status = 'arrived'    where id = l4;
+
+    -- ยังไม่มีฝ่ายแรกลงชื่อ — ปิดทอดต้องไม่ได้
+    begin
+      update public.transfer_leg set status = 'completed' where id = l4;
+    exception when check_violation then blocked := true;
+    end;
+
+    insert into public._trg_result values
+      (15, 'G1 ปิดทอดโดยไม่มีฝ่ายแรกกดส่งมอบไม่ได้',
+           case when blocked then 'PASS' else 'FAIL' end,
+           case when blocked then 'database ปฏิเสธถูกต้อง'
+                else 'ปิดได้ฝ่ายเดียว — กติกาส่งมอบสองฝ่ายไม่มีผล' end);
+
+    -- ฝ่ายแรกลงชื่อ แล้วเวลาต้องมาจาก now() ของฐานข้อมูล ไม่ใช่ค่าที่ส่งมา
+    --
+    -- ⚠ เทียบกับ now() ไม่ใช่ clock_timestamp()
+    --   ทั้งไฟล์อยู่ใน transaction เดียว now() จึงค้างอยู่ที่เวลาเปิด transaction
+    --   ส่วน clock_timestamp() เดินจริง การเทียบสองตัวนี้จะ FAIL เสมอ
+    --   ทั้งที่ trigger ทำงานถูก — สิ่งที่ข้อนี้พิสูจน์คือ "ค่าปลอมไม่รอด"
+    update public.transfer_leg
+       set handover_ready_by = p_sender,
+           handover_ready_at = timestamptz '2000-01-01 00:00:00+07'   -- ค่าปลอมจากเครื่องผู้ใช้
+     where id = l4;
+
+    select handover_ready_at into ready_at from public.transfer_leg where id = l4;
+
+    insert into public._trg_result values
+      (16, 'G2 เวลาส่งมอบฝ่ายแรกมาจาก now() ไม่ใช่ค่าที่ผู้ใช้ส่งมา',
+           case when ready_at = now() then 'PASS' else 'FAIL' end,
+           'ส่งไป 2000-01-01 · ได้ ' || coalesce(ready_at::text, 'null'));
+
+    -- ฝ่ายที่สองยืนยัน แล้วทอดจึงปิดได้
+    update public.transfer_leg set status = 'completed' where id = l4;
+
+    select handover_at is not null into b from public.transfer_leg where id = l4;
+    insert into public._trg_result values
+      (17, 'G3 ครบสองฝ่ายแล้วปิดทอดได้ และ handover_at ถูกตั้งให้เอง',
+           case when b then 'PASS' else 'FAIL' end, 'completed');
+  end;
+
+  -- ---------------------------------------------------------
+  -- 6.2 สีของเคสเดินตาม assessment ที่ยืนยันสี (0022)
+  -- ---------------------------------------------------------
+  declare
+    tri_before text;
+    tri_after  text;
+    tri_keep   text;
+  begin
+    select triage::text into tri_before from public."case" where id = c_id;
+
+    insert into public.assessment (case_id, kind, triage, assessed_by)
+    values (c_id, 'enroute', 'black', p_sender);
+
+    select triage::text into tri_after from public."case" where id = c_id;
+
+    insert into public._trg_result values
+      (18, 'H1 ประเมินซ้ำแล้วสีของเคสเปลี่ยนตาม โดยผู้ประเมินไม่ต้องแก้ตาราง case',
+           case when tri_after = 'black' then 'PASS' else 'FAIL' end,
+           coalesce(tri_before,'null') || ' -> ' || coalesce(tri_after,'null'));
+
+    -- ลง V/S อย่างเดียวโดยไม่ยืนยันสี ต้องไม่ไปล้างสีเดิมทิ้ง
+    insert into public.assessment (case_id, kind, pulse, assessed_by)
+    values (c_id, 'enroute', 88, p_sender);
+
+    select triage::text into tri_keep from public."case" where id = c_id;
+
+    insert into public._trg_result values
+      (19, 'H2 ประเมินที่ไม่ได้ยืนยันสี ต้องไม่ลบสีเดิมทิ้ง',
+           case when tri_keep = 'black' then 'PASS' else 'FAIL' end,
+           coalesce(tri_keep,'null'));
   end;
 
   -- ---------------------------------------------------------

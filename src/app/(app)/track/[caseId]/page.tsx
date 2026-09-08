@@ -24,6 +24,8 @@ import {
   type VehicleOption,
 } from "./leg-card";
 import { NextLegForm, type NextLegUnitOption } from "./next-leg-form";
+import { ReassessPanel } from "./reassess-forms";
+import { TX_LABEL } from "../../sender/schema";
 
 /**
  * หน้า /track/[caseId] — F3 ติดตามสถานะ (Prompt 08)
@@ -98,6 +100,7 @@ function vitalsLine(a: {
   pulse: number | null;
   resp_rate: number | null;
   spo2: number | null;
+  temperature: number | null;
 }): string {
   const parts: string[] = [];
   if (a.sbp !== null && a.dbp !== null) parts.push(`BP ${a.sbp}/${a.dbp}`);
@@ -105,6 +108,7 @@ function vitalsLine(a: {
   if (a.pulse !== null) parts.push(`P ${a.pulse}`);
   if (a.resp_rate !== null) parts.push(`RR ${a.resp_rate}`);
   if (a.spo2 !== null) parts.push(`SpO₂ ${a.spo2}%`);
+  if (a.temperature !== null) parts.push(`T ${a.temperature}°C`);
   if (a.gcs !== null) parts.push(`GCS ${a.gcs}`);
   return parts.join(" · ");
 }
@@ -128,12 +132,14 @@ export default async function Page({
        transfer_leg (
          id, leg_no, status, from_unit_id, to_unit_id,
          requested_at, dispatched_at, on_scene_at, departed_at, arrived_at, handover_at,
+         handover_ready_at, transporter_id, receiver_id,
          docs_ok, property_ok, missing_note, delay_reason, note,
          from_unit:from_unit_id (name_th),
          to_unit:to_unit_id (name_th),
          vehicle:vehicle_id (call_sign, type),
          transporter:transporter_id (full_name, rank_th),
-         receiver:receiver_id (full_name, rank_th)
+         receiver:receiver_id (full_name, rank_th),
+         handover_ready:handover_ready_by (full_name, rank_th)
        )`,
     )
     .eq("id", caseId)
@@ -165,6 +171,13 @@ export default async function Page({
       arrived_at: l.arrived_at,
       handover_at: l.handover_at,
     },
+    // สิทธิ์กดปุ่มคิดที่นี่ ไม่ส่ง id ของใครลง browser (0023)
+    isAssignedTransporter:
+      profile !== null && l.transporter_id === profile.id,
+    isDestinationUnit:
+      profile !== null && l.to_unit_id === profile.unitId,
+    handoverReadyAt: l.handover_ready_at,
+    handoverReadyBy: personName(one(l.handover_ready)),
     docsOk: l.docs_ok,
     propertyOk: l.property_ok,
     missingNote: l.missing_note,
@@ -180,7 +193,7 @@ export default async function Page({
   const { data: rawAssessments } = await supabase
     .from("assessment")
     .select(
-      `id, kind, leg_id, gcs, sbp, dbp, pulse, resp_rate, spo2, avpu, triage,
+      `id, kind, leg_id, gcs, sbp, dbp, pulse, resp_rate, spo2, temperature, avpu, triage,
        findings, treatment, assessed_at,
        assessor:assessed_by (full_name, rank_th)`,
     )
@@ -188,7 +201,46 @@ export default async function Page({
     .order("assessed_at", { ascending: true });
 
   const assessments = rawAssessments ?? [];
+
+  /**
+   * การรักษาที่ให้ทีละรายการ — ต้องอยู่บนเส้นเวลาเดียวกับผลประเมิน
+   * ไม่งั้นหัตถการที่ชุดลำเลียงลงระหว่างทางจะไม่ปรากฏที่ไหนเลยนอกจากแถบสายรัด
+   * (ซึ่งแสดงเฉพาะ tx_code = 'tourniquet')
+   */
+  const { data: rawTreatments } = await supabase
+    .from("treatment")
+    .select(
+      `id, tx_code, detail, dose, route, site, given_at, leg_id,
+       giver:given_by (full_name, rank_th)`,
+    )
+    .eq("case_id", caseId)
+    .order("given_at", { ascending: true });
+
+  const treatments = rawTreatments ?? [];
   const legNoById = new Map(rawLegs.map((l) => [l.id, l.leg_no]));
+
+  /**
+   * เส้นเวลาเดียวของทั้งเคส — ผลประเมินกับการรักษาปนกันเรียงตามเวลาจริง
+   *
+   * ★ ทำไมต้องรวมสองตาราง ไม่แยกเป็นสองรายการ
+   *   คำถามที่คนเปิดหน้านี้มาถามคือ "ระหว่างทางเกิดอะไรขึ้นบ้าง"
+   *   ไม่ใช่ "มีผลประเมินกี่ครั้ง" กับ "ให้ยากี่ครั้ง" แยกกัน
+   *   การให้ยาแล้วความดันขึ้นเป็นเรื่องเดียวกัน ถ้าอยู่คนละรายการจะอ่านไม่ออก
+   */
+  const timeline = [
+    ...assessments.map((a) => ({
+      type: "assessment" as const,
+      at: a.assessed_at,
+      row: a,
+      legNo: a.leg_id ? legNoById.get(a.leg_id) : undefined,
+    })),
+    ...treatments.map((t) => ({
+      type: "treatment" as const,
+      at: t.given_at,
+      row: t,
+      legNo: t.leg_id ? legNoById.get(t.leg_id) : undefined,
+    })),
+  ].sort((a, b) => a.at.localeCompare(b.at));
 
   /**
    * ตัวเลือกสำหรับปุ่มจัดรถ ดึงเฉพาะตอนที่มีทอดรอจัดรถอยู่จริง
@@ -401,6 +453,19 @@ export default async function Page({
             ))}
           </div>
 
+          {/*
+            ประเมินซ้ำ — วางใต้ส่วนจัดรถตามที่เจ้าของโครงการสั่ง
+            นายสิบพยาบาลประจำรถประเมินผู้ป่วยก่อนขึ้นรถ ตรงนี้คือที่ลงบันทึกนั้น
+            กางไว้เองเมื่อทอดยังเดินอยู่ เพราะนั่นคือตอนที่มีคนต้องใช้จริง
+          */}
+          <div className="space-y-3">
+            <ReassessPanel
+              caseId={caseId}
+              currentTriage={(row.triage as TriageColor | null) ?? null}
+              open={openLeg !== undefined}
+            />
+          </div>
+
           {canStartNextLeg && lastLeg && (
             <NextLegForm
               caseId={row.id}
@@ -412,16 +477,50 @@ export default async function Page({
           {/* ผลประเมินเดินทางไปกับผู้ป่วยข้ามทุกทอด ไม่ต้องคัดลอกข้อมูล */}
           <section className="rounded-xl border border-border bg-card p-4">
             <h2 className="text-lg font-semibold">ผลประเมินตลอดสายส่งกลับ</h2>
-            {assessments.length === 0 ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              เรียงตามเวลาที่บันทึกจริง — อ่านจากบนลงล่างจะเห็นว่าอาการเดินไปทางไหน
+            </p>
+            {timeline.length === 0 ? (
               <p className="mt-2 text-sm text-muted-foreground">
                 ยังไม่มีการบันทึกผลประเมินในเคสนี้
               </p>
             ) : (
               <ol className="mt-3 space-y-3">
-                {assessments.map((a) => {
-                  const vitals = vitalsLine(a);
-                  const legNo = a.leg_id ? legNoById.get(a.leg_id) : undefined;
-                  return (
+                {timeline.map((ev) =>
+                  ev.type === "treatment" ? (
+                    <li
+                      key={`t-${ev.row.id}`}
+                      className="rounded-lg border border-border border-l-4 border-l-border px-3 py-2.5"
+                    >
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span className="text-sm font-semibold">
+                          การรักษา · {TX_LABEL[ev.row.tx_code] ?? ev.row.tx_code}
+                        </span>
+                        {ev.legNo !== undefined && (
+                          <span className="font-mono text-xs text-muted-foreground">
+                            ทอด {ev.legNo}
+                          </span>
+                        )}
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          <RelativeTime value={ev.at} />
+                        </span>
+                      </div>
+                      {(ev.row.detail || ev.row.dose || ev.row.route || ev.row.site) && (
+                        <p className="mt-1 text-sm">
+                          {[ev.row.detail, ev.row.dose, ev.row.route, ev.row.site]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                      )}
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        บันทึกโดย {personName(one(ev.row.giver)) ?? "ไม่ทราบผู้บันทึก"}
+                      </p>
+                    </li>
+                  ) : (
+                    ((a) => {
+                      const vitals = vitalsLine(a);
+                      const legNo = a.leg_id ? legNoById.get(a.leg_id) : undefined;
+                      return (
                     <li
                       key={a.id}
                       className="rounded-lg border border-border px-3 py-2.5"
@@ -430,6 +529,9 @@ export default async function Page({
                         <span className="text-sm font-semibold">
                           {ASSESSMENT_KIND_LABEL[a.kind] ?? a.kind}
                         </span>
+                        {/* สีที่ยืนยันไว้ในการประเมินครั้งนี้ — ตอบว่า "ตอนนั้นเป็นสีอะไร"
+                            ไม่ใช่แค่สีล่าสุดของเคส จึงเห็นได้ว่าสีเปลี่ยนตอนไหนและใครเปลี่ยน */}
+                        {a.triage && <TriageChip value={a.triage as TriageColor} />}
                         {legNo !== undefined && (
                           <span className="font-mono text-xs text-muted-foreground">
                             ทอด {legNo}
@@ -461,8 +563,10 @@ export default async function Page({
                         บันทึกโดย {personName(one(a.assessor)) ?? "ไม่ทราบผู้บันทึก"}
                       </p>
                     </li>
-                  );
-                })}
+                      );
+                    })(ev.row)
+                  ),
+                )}
               </ol>
             )}
           </section>

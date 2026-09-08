@@ -9,6 +9,19 @@ import { createClient } from "@/lib/supabase/server";
  *   ซึ่งเปลี่ยนความหมายของ join ไปด้วยในบางกรณี — ยิงแยกหนึ่งครั้งอ่านง่ายกว่ามาก
  *   และหน้าที่ต้องใช้มีไม่กี่หน้า
  *
+ * ★ การเรียงต้องมีตัวตัดสินเสมอกันเสมอ ห้ามเรียงด้วย given_at อย่างเดียว
+ *   ช่องเวลาที่รัดเป็น datetime-local ซึ่งละเอียดแค่ระดับนาที และสายรัดหลายเส้น
+ *   ของเคสเดียวกันมักถูกบันทึกพร้อมกันในคำสั่งเดียว created_at จึงเท่ากันด้วย
+ *   (มาจาก now() ของทรานแซกชันเดียวกัน) เมื่อคีย์เรียงเสมอกันสนิท
+ *   Postgres คืนลำดับแบบไม่รับประกัน และเปลี่ยนได้ระหว่างการ query แต่ละครั้ง
+ *
+ *   ผลที่เคยเกิดจริง (8 ก.ย. 2569) — ป้าย "เส้นที่ 1 / เส้นที่ 2" เป็นเลขตามตำแหน่ง
+ *   ในรายการ พอกดคลายเส้นที่ 1 แล้วหน้า re-render ลำดับสลับ เส้นที่เพิ่งคลาย
+ *   ไปโผล่เป็นเส้นที่ 2 ส่วนเส้นที่ 1 ยังแดงอยู่ ดูเหมือนกดผิดเส้นทั้งที่ข้อมูลถูก
+ *   ในสถานการณ์ที่คนกำลังนับเวลาขาดเลือด ความสับสนแบบนี้อันตรายมาก
+ *
+ *   id เป็นตัวตัดสินสุดท้ายเพราะไม่ซ้ำแน่นอน ลำดับที่ได้จึงคงที่ทุกครั้ง
+ *
  * ★ ไม่มีการเช็คสิทธิ์ในไฟล์นี้เลย
  *   policy treatment_select ใช้ can_see_case() อยู่แล้ว ทุกคนในสายส่งกลับ
  *   จึงเห็นสายรัดของเคสที่ตัวเองเห็น — ซึ่งเป็นเหตุผลทั้งหมดที่ข้อมูลนี้
@@ -57,7 +70,9 @@ export async function getTourniquets(caseId: string): Promise<TourniquetItem[]> 
     .select(SELECT)
     .eq("case_id", caseId)
     .eq("tx_code", "tourniquet")
-    .order("given_at", { ascending: true });
+    .order("given_at", { ascending: true })
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
 
   return ((data ?? []) as Raw[]).map(toItem);
 }
@@ -78,7 +93,9 @@ export async function getTourniquetsByCase(
     .select(SELECT)
     .in("case_id", [...new Set(caseIds)])
     .eq("tx_code", "tourniquet")
-    .order("given_at", { ascending: true });
+    .order("given_at", { ascending: true })
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
 
   for (const row of (data ?? []) as Raw[]) {
     const list = out.get(row.case_id);

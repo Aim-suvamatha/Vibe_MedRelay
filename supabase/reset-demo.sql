@@ -63,6 +63,10 @@ update public.transfer_leg l
        departed_at    = null,
        arrived_at     = null,
        handover_at    = null,
+       -- 0022 · ล้างรอยส่งมอบฝ่ายแรกด้วย ไม่งั้นค้างอยู่โดยไม่มี arrived_at
+       -- แล้วชน leg_time_order ตอน update (constraint ตรวจทั้งแถวหลัง update)
+       handover_ready_at = null,
+       handover_ready_by = null,
        vehicle_id     = null,
        transporter_id = null,
        receiver_id    = null,
@@ -96,6 +100,10 @@ update public.transfer_leg l
        departed_at    = now() - interval '12 minutes',
        arrived_at     = null,
        handover_at    = null,
+       -- 0022 · ล้างรอยส่งมอบฝ่ายแรกด้วย ไม่งั้นค้างอยู่โดยไม่มี arrived_at
+       -- แล้วชน leg_time_order ตอน update (constraint ตรวจทั้งแถวหลัง update)
+       handover_ready_at = null,
+       handover_ready_by = null,
        vehicle_id     = (select id from public.vehicle where call_sign = 'DEMO-01'),
        transporter_id = (select id from public.profile where service_number = '9900000002'),
        receiver_id    = (select id from public.profile where service_number = '9900000003'),
@@ -116,7 +124,7 @@ update public."case"
 --    ที่เหลือว่าง ยกเว้น DEMO-04 ที่ชุดจำลองตั้งเป็นซ่อมบำรุงไว้แต่แรก
 --    (ตั้งใจให้มีรถที่จัดไม่ได้อย่างน้อยหนึ่งคัน จะได้เห็นว่ากระดานแยกสถานะจริง)
 -- -------------------------------------------------------------
-update public.vehicle set status = 'available'   where call_sign in ('DEMO-02','DEMO-03','DEMO-05');
+update public.vehicle set status = 'available'   where call_sign in ('DEMO-02','DEMO-03','DEMO-05','DEMO-06','DEMO-07');
 update public.vehicle set status = 'dispatched'  where call_sign = 'DEMO-01';
 update public.vehicle set status = 'maintenance' where call_sign = 'DEMO-04';
 

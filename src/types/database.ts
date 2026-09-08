@@ -661,6 +661,8 @@ export type Database = {
           evac_director: string | null
           from_unit_id: string
           handover_at: string | null
+          handover_ready_at: string | null
+          handover_ready_by: string | null
           id: string
           leg_no: number
           missing_note: string | null
@@ -687,6 +689,8 @@ export type Database = {
           evac_director?: string | null
           from_unit_id: string
           handover_at?: string | null
+          handover_ready_at?: string | null
+          handover_ready_by?: string | null
           id?: string
           leg_no: number
           missing_note?: string | null
@@ -713,6 +717,8 @@ export type Database = {
           evac_director?: string | null
           from_unit_id?: string
           handover_at?: string | null
+          handover_ready_at?: string | null
+          handover_ready_by?: string | null
           id?: string
           leg_no?: number
           missing_note?: string | null
@@ -747,6 +753,13 @@ export type Database = {
             columns: ["from_unit_id"]
             isOneToOne: false
             referencedRelation: "unit"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transfer_leg_handover_ready_by_fkey"
+            columns: ["handover_ready_by"]
+            isOneToOne: false
+            referencedRelation: "profile"
             referencedColumns: ["id"]
           },
           {

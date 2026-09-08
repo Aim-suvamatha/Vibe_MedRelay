@@ -28,6 +28,12 @@ import {
  * ★ ห้ามใช้ .insert().select() กับ transfer_leg (HANDOFF §5 ข้อ 10)
  *   RETURNING บังคับให้ policy ฝั่ง SELECT ตรวจแถวที่คำสั่งเดียวกันเพิ่งสร้าง
  *   can_see_case() เป็น stable จึงมองไม่เห็นแถวนั้นแล้วตอบว่าไม่มีสิทธิ์
+ *
+ *   ⚠ ข้อห้ามนั้นใช้กับ INSERT เท่านั้น — กับ UPDATE ต้องใช้ .select() เสมอ
+ *     UPDATE ที่ policy ปฏิเสธจะแก้ 0 แถว "โดยไม่มี error" (HANDOFF §5 ข้อ 13)
+ *     ถ้าดูแต่ error ปุ่มจะรายงานว่าสำเร็จทั้งที่ไม่มีอะไรเปลี่ยน ซึ่งอันตราย
+ *     กว่าปุ่มที่กดไม่ได้เลย เพราะผู้ใช้เดินต่อไปโดยเชื่อว่าบันทึกแล้ว
+ *     แถวที่ UPDATE แตะมีอยู่ก่อนแล้ว can_see_case() จึงมองเห็นตามปกติ
  */
 
 export type LegActionState = {
@@ -67,7 +73,9 @@ async function loadLeg(legId: string) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("transfer_leg")
-    .select("id, case_id, leg_no, status, to_unit_id, from_unit_id")
+    .select(
+      "id, case_id, leg_no, status, to_unit_id, from_unit_id, handover_ready_at, handover_ready_by",
+    )
     .eq("id", legId)
     .maybeSingle();
   return data;
@@ -101,7 +109,7 @@ export async function dispatchLeg(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: changed, error } = await supabase
     .from("transfer_leg")
     .update({
       status: "dispatched",
@@ -110,9 +118,13 @@ export async function dispatchLeg(
     })
     .eq("id", legId)
     // กันการกดพร้อมกันสองเครื่อง — ถ้าอีกคนจัดรถไปแล้วเงื่อนไขนี้จะไม่ตรงและไม่มีแถวถูกแก้
-    .eq("status", "pending");
+    .eq("status", "pending")
+    .select("id");
 
   if (error) return { error: humanize(error.code, "จัดรถไม่สำเร็จ กรุณาลองอีกครั้ง") };
+  if (!changed || changed.length === 0) {
+    return { error: humanize("42501", "จัดรถไม่สำเร็จ กรุณาลองอีกครั้ง") };
+  }
 
   // สถานะรถเปลี่ยนเป็น 'dispatched' เองโดย trigger sync_vehicle_status ใน 0016
   // ห้ามยิง update ตาราง vehicle จากที่นี่ — policy vehicle_update ยอมเฉพาะ monitor/admin
@@ -161,17 +173,17 @@ export async function advanceLeg(
 
   if (target === "completed") {
     /**
-     * ช่องตรวจก่อนส่งมอบจาก ทบ.466-903 — เอกสารครบ · สิ่งของครบ · ถ้าไม่ครบขาดอะไร
-     * เก็บทุกครั้งแม้ติ๊กครบ เพราะ "ตรวจแล้วครบ" กับ "ไม่เคยตรวจ" ต่างกันในทางคดี
+     * ตั้งแต่ 0022 ขั้นนี้คือ "ฝ่ายที่สองยืนยันรับมอบ" ไม่ใช่การส่งมอบทั้งกระบวนการ
+     * รายการตรวจ ทบ.466-903 ถูกเก็บไปแล้วตอนฝ่ายแรกกด (ดู offerHandover ข้อ 2.5)
+     *
+     * constraint leg_time_order ปฏิเสธการปิดทอดที่ไม่มี handover_ready_at อยู่แล้ว
+     * แต่ดักที่นี่ด้วยเพื่อให้ได้ข้อความที่บอกว่าต้องรอใคร ไม่ใช่ error ของ database
      */
-    patch.docs_ok = checked(formData, "docsOk");
-    patch.property_ok = checked(formData, "propertyOk");
-
-    const missing = str(formData, "missingNote");
-    patch.missing_note = missing === "" ? null : missing.slice(0, 500);
-
-    if ((!patch.docs_ok || !patch.property_ok) && !missing) {
-      return { error: "มีรายการที่ยังไม่ครบ กรุณาระบุว่าขาดอะไรก่อนกดส่งมอบ" };
+    if (!leg.handover_ready_at) {
+      return {
+        error:
+          "ชุดลำเลียงยังไม่ได้กดส่งมอบ การรับมอบต้องเกิดหลังฝ่ายส่งลงบันทึกแล้วเท่านั้น",
+      };
     }
 
     /**
@@ -189,20 +201,93 @@ export async function advanceLeg(
   if (delay) patch.delay_reason = delay.slice(0, 500);
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: changed, error } = await supabase
     .from("transfer_leg")
     .update(patch)
     .eq("id", legId)
     // กันสองเครื่องกดพร้อมกัน — เดินได้จากสถานะที่เห็นตอนตรวจเท่านั้น
-    .eq("status", required);
+    .eq("status", required)
+    .select("id");
 
   if (error) {
     return { error: humanize(error.code, "บันทึกสถานะไม่สำเร็จ กรุณาลองอีกครั้ง") };
+  }
+  if (!changed || changed.length === 0) {
+    return { error: humanize("42501", "บันทึกสถานะไม่สำเร็จ กรุณาลองอีกครั้ง") };
   }
 
   // รถถูกคืนเข้ากระดานเองโดย trigger sync_vehicle_status ใน 0016
   // คนที่กดส่งมอบคือชุดลำเลียงหรือผู้รับปลายทาง ซึ่งไม่มีสิทธิ์แก้ตาราง vehicle ตาม RLS
   // ถ้าทำที่นี่ รถจะค้างสถานะ 'dispatched' ตลอดไปโดยไม่มี error ให้เห็น
+
+  revalidatePath(`/track/${leg.case_id}`);
+  return { okLegId: legId };
+}
+
+/* =============================================================
+ * 2.5 ส่งมอบผู้ป่วย (ฝ่ายแรก) — ชุดลำเลียงลงบันทึก แต่ทอดยังไม่ปิด
+ *
+ * ทำไมต้องแยกเป็นสองปุ่มแทนที่จะให้คนเดียวกดจบ (คำสั่งเจ้าของโครงการ 8 ก.ย. 2569)
+ *   การส่งมอบผู้ป่วยคือการเปลี่ยนมือผู้รับผิดชอบ ถ้าฝ่ายเดียวกดปิดได้
+ *   ระบบจะบันทึกว่า "ส่งมอบแล้ว" ทั้งที่ปลายทางอาจยังไม่มีใครรับรู้
+ *   ซึ่งเป็นช่วงที่ผู้ป่วยไม่มีเจ้าของ — จุดที่อันตรายที่สุดของทั้งสายส่งกลับ
+ *
+ * ขั้นนี้ไม่เปลี่ยน status (ยังเป็น 'arrived') เปลี่ยนแค่ handover_ready_by
+ * เวลา handover_ready_at ถูก trigger set_leg_timestamps ตีตราให้เอง
+ * ============================================================= */
+export async function offerHandover(
+  _prev: LegActionState,
+  formData: FormData,
+): Promise<LegActionState> {
+  const legId = str(formData, "legId");
+  if (!legId) return { error: "ไม่พบทอดที่ต้องการส่งมอบ" };
+
+  const leg = await loadLeg(legId);
+  if (!leg) return { error: "ไม่พบทอดนี้ หรือบัญชีของคุณไม่มีสิทธิ์เห็นเคสนี้" };
+
+  if (leg.status !== "arrived") {
+    return {
+      error: `ส่งมอบได้เมื่อถึงปลายทางแล้วเท่านั้น (สถานะปัจจุบัน: ${LEG_STATUS_LABEL[leg.status as LegStatus]})`,
+    };
+  }
+  if (leg.handover_ready_at) {
+    return { error: "ทอดนี้ถูกส่งมอบไปแล้ว กำลังรอผู้รับปลายทางยืนยัน" };
+  }
+
+  const profile = await getProfile();
+  if (!profile) return { error: "ไม่พบบัญชีผู้ใช้ กรุณาเข้าสู่ระบบใหม่" };
+
+  /**
+   * ช่องตรวจก่อนส่งมอบจาก ทบ.466-903 — เอกสารครบ · สิ่งของครบ · ถ้าไม่ครบขาดอะไร
+   * เก็บทุกครั้งแม้ติ๊กครบ เพราะ "ตรวจแล้วครบ" กับ "ไม่เคยตรวจ" ต่างกันในทางคดี
+   */
+  const docsOk = checked(formData, "docsOk");
+  const propertyOk = checked(formData, "propertyOk");
+  const missing = str(formData, "missingNote");
+
+  if ((!docsOk || !propertyOk) && !missing) {
+    return { error: "มีรายการที่ยังไม่ครบ กรุณาระบุว่าขาดอะไรก่อนกดส่งมอบ" };
+  }
+
+  const supabase = await createClient();
+  const { data: changed, error } = await supabase
+    .from("transfer_leg")
+    .update({
+      handover_ready_by: profile.id,
+      docs_ok: docsOk,
+      property_ok: propertyOk,
+      missing_note: missing === "" ? null : missing.slice(0, 500),
+    })
+    .eq("id", legId)
+    // กันสองเครื่องกดพร้อมกัน — ฝ่ายแรกลงบันทึกได้ครั้งเดียว
+    .eq("status", "arrived")
+    .is("handover_ready_at", null)
+    .select("id");
+
+  if (error) return { error: humanize(error.code, "ส่งมอบไม่สำเร็จ กรุณาลองอีกครั้ง") };
+  if (!changed || changed.length === 0) {
+    return { error: humanize("42501", "ส่งมอบไม่สำเร็จ กรุณาลองอีกครั้ง") };
+  }
 
   revalidatePath(`/track/${leg.case_id}`);
   return { okLegId: legId };

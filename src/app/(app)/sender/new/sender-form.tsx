@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils";
 import { createEvacRequest } from "../actions";
 import {
   AIRWAY_LABEL,
-  AVPU_LABEL,
   BRANCH_LABEL,
   CATEGORY_LABEL,
   CHEST_LABEL,
@@ -40,6 +39,7 @@ import { InjuryMap } from "./injury-map";
 import { PickupField, type PickupPointOption } from "./pickup-field";
 import { PropertyList } from "./property-list";
 import { TreatmentList } from "./treatment-list";
+import { VitalsFields } from "./vitals-fields";
 
 /**
  * ฟอร์มขอส่งกลับแบบกรอกทีละขั้น 7 ขั้น (คำสั่งเจ้าของโครงการ 8 ก.ย. 2569)
@@ -633,64 +633,7 @@ export function SenderForm({
           ถ้าเว้นว่างทั้งหมดระบบจะไม่สร้างแถวประเมินเปล่า
         </p>
 
-        <SubHead>สัญญาณชีพ · V/S</SubHead>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="ความดันตัวบน" htmlFor={`${id}-sbp`} error={err.sbp}>
-            <NumInput id={`${id}-sbp`} name="sbp" inputMode="numeric" min={0} max={300} />
-          </Field>
-          <Field label="ความดันตัวล่าง" htmlFor={`${id}-dbp`} error={err.dbp}>
-            <NumInput id={`${id}-dbp`} name="dbp" inputMode="numeric" min={0} max={200} />
-          </Field>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <Field label="ชีพจร" htmlFor={`${id}-p`} error={err.pulse}>
-            <NumInput id={`${id}-p`} name="pulse" inputMode="numeric" min={0} max={300} />
-          </Field>
-          <Field label="หายใจ" htmlFor={`${id}-rr`} error={err.respRate}>
-            <NumInput id={`${id}-rr`} name="respRate" inputMode="numeric" min={0} max={80} />
-          </Field>
-          <Field label="SpO₂ (%)" htmlFor={`${id}-spo2`} error={err.spo2}>
-            <NumInput id={`${id}-spo2`} name="spo2" inputMode="numeric" min={0} max={100} />
-          </Field>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="อุณหภูมิ (°C)" htmlFor={`${id}-t`} error={err.temperature}>
-            <NumInput id={`${id}-t`} name="temperature" step="0.1" min={20} max={45} />
-          </Field>
-        </div>
-
-        <SubHead>ระดับการรู้ตัว</SubHead>
-        <Field
-          label="ระดับความรู้สึกตัว"
-          htmlFor={`${id}-avpu`}
-          error={err.avpu}
-          hint="ตามหมายเหตุท้าย ทบ.466-901 ด้านหลัง"
-        >
-          <NativeSelect id={`${id}-avpu`} name="avpu" defaultValue="">
-            <option value="">ยังไม่ประเมิน</option>
-            {Object.entries(AVPU_LABEL).map(([v, l]) => (
-              <option key={v} value={v}>
-                {l}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="GCS" htmlFor={`${id}-gcs`} error={err.gcs}>
-            <NumInput
-              id={`${id}-gcs`}
-              name="gcs"
-              inputMode="numeric"
-              min={3}
-              max={15}
-              placeholder="3–15"
-            />
-          </Field>
-        </div>
-
-        <Field label="สิ่งที่ตรวจพบเพิ่มเติม" htmlFor={`${id}-f`} error={err.findings}>
-          <TextArea id={`${id}-f`} name="findings" rows={3} maxLength={1000} />
-        </Field>
+        <VitalsFields id={id} err={err} />
       </section>
 
       {/* ══ ขั้นที่ 5 · เหตุการณ์และการบาดเจ็บ ═══════════ */}

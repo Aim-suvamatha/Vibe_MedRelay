@@ -176,7 +176,7 @@ const optionalBool = z.preprocess(
  *   ค่าในช่องนี้มาจาก state ของ React ที่เราคุมเอง ถ้ามันเพี้ยนแปลว่าโค้ดเราพัง
  *   ไม่ใช่ผู้ใช้กรอกผิด การขึ้น error ให้ผู้ใช้แก้จึงไม่ช่วยอะไร
  */
-function jsonArray<T extends z.ZodTypeAny>(item: T) {
+export function jsonArray<T extends z.ZodTypeAny>(item: T) {
   return z.preprocess((v) => {
     if (Array.isArray(v)) return v;
     if (typeof v !== "string" || v.trim() === "") return [];
@@ -189,6 +189,35 @@ function jsonArray<T extends z.ZodTypeAny>(item: T) {
   }, z.array(item));
 }
 
+/**
+ * ช่องสัญญาณชีพ — ใช้ร่วมกันสองที่ จึงต้องอยู่ที่เดียว
+ *
+ *   1. ขั้นที่ 4 ของฟอร์มผู้ส่ง (ประเมินแรกรับ)
+ *   2. ฟอร์มประเมินซ้ำใน /track (ชุดลำเลียงและปลายทางประเมินระหว่างทาง)
+ *
+ * ทั้งสองเขียนลงตาราง assessment ตารางเดียวกัน ช่วงตัวเลขที่ยอมรับจึงต้องตรงกัน
+ * และต้องตรงกับ CHECK constraint ใน 0007_assessment.sql ด้วย
+ * คู่กับหน้าจอที่ src/app/(app)/sender/new/vitals-fields.tsx
+ */
+export const VITALS_SHAPE = {
+  sbp: optionalInt(0, 300, "ความดันตัวบน"),
+  dbp: optionalInt(0, 200, "ความดันตัวล่าง"),
+  pulse: optionalInt(0, 300, "ชีพจร"),
+  respRate: optionalInt(0, 80, "อัตราหายใจ"),
+  spo2: optionalInt(0, 100, "SpO₂"),
+  temperature: optionalNumber(20, 45, "อุณหภูมิ"),
+  avpu: optionalEnum(AVPU_VALUES),
+  gcs: optionalInt(3, 15, "GCS"),
+  findings: optionalText(1000, "สิ่งที่ตรวจพบ"),
+};
+
+/** ความดันตัวล่างต้องไม่มากกว่าตัวบน — ตรงกับ constraint assessment_bp_order */
+export const bpOrderRefine = {
+  check: (v: { sbp?: number; dbp?: number }) =>
+    v.dbp === undefined || v.sbp === undefined || v.dbp <= v.sbp,
+  message: "ความดันตัวล่างต้องไม่มากกว่าตัวบน",
+} as const;
+
 /** ตำแหน่งบาดเจ็บที่กดจากแผนภาพร่างกาย */
 const InjurySite = z.object({
   site: z.string().trim().min(1).max(60),
@@ -197,7 +226,7 @@ const InjurySite = z.object({
 });
 
 /** หนึ่งรายการการรักษาที่ให้ไปแล้วก่อนส่ง */
-const TreatmentRow = z.object({
+export const TreatmentRow = z.object({
   txCode: z.enum(TX_VALUES),
   detail: z.string().trim().max(200).optional(),
   dose: z.string().trim().max(60).optional(),
@@ -303,15 +332,7 @@ export const EvacRequestInput = z
     patientCategory: optionalEnum(CATEGORY_VALUES),
 
     /* ── ขั้นที่ 4 ประเมินแรกรับ ─────────────────────────── */
-    sbp: optionalInt(0, 300, "ความดันตัวบน"),
-    dbp: optionalInt(0, 200, "ความดันตัวล่าง"),
-    pulse: optionalInt(0, 300, "ชีพจร"),
-    respRate: optionalInt(0, 80, "อัตราหายใจ"),
-    spo2: optionalInt(0, 100, "SpO₂"),
-    temperature: optionalNumber(20, 45, "อุณหภูมิ"),
-    avpu: optionalEnum(AVPU_VALUES),
-    gcs: optionalInt(3, 15, "GCS"),
-    findings: optionalText(1000, "สิ่งที่ตรวจพบ"),
+    ...VITALS_SHAPE,
 
     /* ── ขั้นที่ 5 เหตุการณ์และการบาดเจ็บ ────────────────── */
     onDuty: optionalBool,

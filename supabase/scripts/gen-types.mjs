@@ -5,7 +5,7 @@
  *
  * ต้องมี Personal Access Token — Dashboard → Account → Access Tokens (เลือก Read-only พอ)
  * สคริปต์จะถามเอง โดยไม่แสดงตัวอักษรบนจอและไม่ทิ้งไว้ใน shell history
- * ถ้าตั้ง SUPABASE_ACCESS_TOKEN ไว้ใน environment แล้วจะใช้ค่านั้นเลย ไม่ถามซ้ำ
+ * ถ้าตั้ง SUPABASE_ACCESS_TOKEN ไว้ใน environment หรือใน .env.local แล้วจะใช้ค่านั้นเลย ไม่ถามซ้ำ
  *
  * ทำไมต้องใช้ Management API แทน `supabase gen types --db-url`
  *   ลองมาแล้วทั้ง CLI 1.226 · 2.48 · 2.116 · latest — ทุกเวอร์ชันตอบเหมือนกันว่า
@@ -62,8 +62,12 @@ if (!projectUrl) {
 }
 const ref = new URL(projectUrl).hostname.split(".")[0];
 
+// ลำดับ: environment ก่อน แล้วค่อย .env.local แล้วค่อยถามบนจอ
+// อ่านจาก .env.local ด้วยเพราะไฟล์นั้นคือที่เก็บความลับของโครงการนี้อยู่แล้ว
+// (ถูก gitignore) และเป็นที่ที่คนตั้งค่าคาดว่าจะใส่ ไม่ใช่ export ในเชลล์ที่หายไปทุกครั้งที่ปิด
 const token =
   process.env.SUPABASE_ACCESS_TOKEN ||
+  env.SUPABASE_ACCESS_TOKEN ||
   (await askHidden("Supabase Personal Access Token (ไม่แสดงบนจอ): "));
 
 if (!token) {
