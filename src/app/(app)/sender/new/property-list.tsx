@@ -23,31 +23,44 @@ import { Field, NumInput, TextInput } from "./fields";
  */
 const WEAPON_ITEM = "อาวุธประจำกาย";
 
-const STANDARD: readonly { name: string; unit: string }[] = [
-  { name: WEAPON_ITEM, unit: "กระบอก" },
-  { name: "ชุดเครื่องยิงเรเซอร์ไมด์", unit: "ชุด" },
-  { name: "ซองกระสุน", unit: "ซอง" },
-  { name: "เสื้อชุดบรรจุกระสุน", unit: "ผืน" },
-  { name: "ชุดสายโยงบ่า เข็มขัดสนาม", unit: "ชุด" },
-  { name: "กระติกน้ำ พร้อมซอง", unit: "ชุด" },
-  { name: "กระสุนฝึกหัดบรรจุ", unit: "นัด" },
-  { name: "ชุดฝึกพราง", unit: "ชุด" },
-  { name: "รองในหมวกเหล็ก หมวกเหล็ก ผ้าพราง ตาข่าย", unit: "ชุด" },
-  { name: "ผ้าพันคอสีพราง", unit: "ชุด" },
-  { name: "รองเท้าเดินป่า", unit: "คู่" },
-  { name: "รองเท้าผ้าใบ", unit: "คู่" },
-  { name: "ถุงเท้า", unit: "คู่" },
-  { name: "พลั่วสนาม พร้อมซอง", unit: "ชุด" },
-  { name: "เป้สนาม", unit: "ใบ" },
-  { name: "หม้อข้าวสนาม พร้อมซอง", unit: "ชุด" },
-  { name: "เสื้อยืด", unit: "ตัว" },
-  { name: "เสื้อเกราะ", unit: "ตัว" },
+/**
+ * ★ ลำดับและค่า def คือของจริงจากหน่วย ไม่ใช่การเรียงตามตัวอักษร (8 ก.ย. 2569)
+ *   เก้ารายการแรกคือของที่ทหารหนึ่งนายพกติดตัวเกือบทุกครั้ง จึงใส่จำนวนไว้ให้เลย
+ *   ที่เหลือ def = 0 เพราะมีเฉพาะบางภารกิจ ต้องให้คนกรอกเองถึงจะนับว่าตรวจแล้ว
+ *
+ *   การเรียงแบบนี้ทำให้เสนารักษ์ไล่จากบนลงล่างแล้วแก้เฉพาะที่ต่างจากปกติ
+ *   แทนที่จะต้องกรอกครบ 18 ช่องทุกเคส
+ */
+const STANDARD: readonly { name: string; unit: string; def: number }[] = [
+  { name: WEAPON_ITEM, unit: "กระบอก", def: 1 },
+  { name: "ซองกระสุน", unit: "ซอง", def: 2 },
+  { name: "ชุดสายโยงบ่า เข็มขัดสนาม", unit: "ชุด", def: 1 },
+  { name: "ชุดฝึกพราง", unit: "ชุด", def: 1 },
+  { name: "เสื้อชุดบรรจุกระสุน", unit: "ผืน", def: 1 },
+  { name: "เสื้อยืด", unit: "ตัว", def: 1 },
+  { name: "รองในหมวกเหล็ก หมวกเหล็ก ผ้าพราง ตาข่าย", unit: "ชุด", def: 1 },
+  { name: "ถุงเท้า", unit: "คู่", def: 1 },
+  { name: "รองเท้าเดินป่า (combat)", unit: "คู่", def: 1 },
+  { name: "ผ้าพันคอสีพราง", unit: "ชุด", def: 0 },
+  { name: "เป้สนาม", unit: "ใบ", def: 0 },
+  { name: "เสื้อเกราะ", unit: "ตัว", def: 0 },
+  { name: "กระติกน้ำ พร้อมซอง", unit: "ชุด", def: 0 },
+  { name: "กระสุนฝึกหัดบรรจุ", unit: "นัด", def: 0 },
+  { name: "ชุดเครื่องยิงเรเซอร์ไมด์", unit: "ชุด", def: 0 },
+  { name: "รองเท้าผ้าใบ", unit: "คู่", def: 0 },
+  { name: "พลั่วสนาม พร้อมซอง", unit: "ชุด", def: 0 },
+  { name: "หม้อข้าวสนาม พร้อมซอง", unit: "ชุด", def: 0 },
 ];
+
+/** ค่าเริ่มต้นของทุกช่อง สร้างครั้งเดียวตอนโหลดโมดูล ไม่ใช่ทุกครั้งที่ render */
+const DEFAULT_QTY: Record<string, string> = Object.fromEntries(
+  STANDARD.map((s) => [s.name, String(s.def)]),
+);
 
 type Extra = { key: string; itemName: string; qty: string; note: string };
 
 export function PropertyList() {
-  const [qty, setQty] = useState<Record<string, string>>({});
+  const [qty, setQty] = useState<Record<string, string>>(DEFAULT_QTY);
   const [extras, setExtras] = useState<Extra[]>([]);
   const [weaponSerial, setWeaponSerial] = useState("");
 
@@ -101,7 +114,7 @@ export function PropertyList() {
 
       <Field
         label="รายการมาตรฐาน"
-        hint="กรอกจำนวนเฉพาะรายการที่ส่งไปด้วย เว้นว่างคือไม่มี"
+        hint="ระบบใส่จำนวนที่พบบ่อยไว้ให้แล้ว แก้เฉพาะรายการที่ต่างจากนี้ · 0 คือไม่ได้ส่งไปด้วย"
       >
         <ul className="space-y-2">
           {STANDARD.map((s) => (

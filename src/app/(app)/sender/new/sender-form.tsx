@@ -114,7 +114,6 @@ const FIELD_STEP: Partial<Record<keyof EvacRequestValues, number>> = {
   operationType: 5,
   operatingBase: 5,
   injuryPlace: 5,
-  injuryGrid: 5,
   protectiveGear: 5,
   injurySites: 5,
   airwayStatus: 5,
@@ -219,6 +218,35 @@ export function SenderForm({
    * จึงรีเฟรชตอนที่ผู้ใช้จิ้มช่อง ซึ่งเป็นจังหวะก่อนเลือกค่าเสมอ
    */
   const [nowLocal, setNowLocal] = useState(currentLocalMinute);
+
+  /**
+   * ห้าช่องประวัติที่เกือบทุกเคสตอบว่า "ไม่มี" เหมือนกันหมด
+   *
+   * เว้นว่างแทน "ไม่มี" ไม่ได้ — ปลายทางต้องแยกออกระหว่าง "ถามแล้วไม่มี"
+   * กับ "ยังไม่ได้ถาม" (เหตุผลเต็มอยู่ใน hint ของช่องแพ้ยา)
+   * เสนารักษ์จึงต้องพิมพ์คำเดิมห้าครั้งทุกเคส ปุ่มนี้ยุบเหลือกดครั้งเดียว
+   *
+   * ★ ต้องเป็น controlled ทั้งห้าช่อง ปุ่มถึงจะเขียนค่าลงไปได้
+   *   ถ้าปล่อยเป็น uncontrolled แล้วไปยัดค่าผ่าน ref ค่าจะไม่ตรงกับสิ่งที่ React คิด
+   */
+  const [history, setHistory] = useState({
+    drugAllergy: "",
+    foodAllergy: "",
+    chronicConditions: "",
+    pastHistory: "",
+    regularMeds: "",
+  });
+
+  /** ทับทุกช่องเสมอ ไม่ว่าจะมีข้อความอยู่ก่อนหรือไม่ (คำสั่งเจ้าของโครงการ 8 ก.ย. 2569) */
+  function fillHistoryNone() {
+    setHistory({
+      drugAllergy: "ไม่มี",
+      foodAllergy: "ไม่มี",
+      chronicConditions: "ไม่มี",
+      pastHistory: "ไม่มี",
+      regularMeds: "ไม่มี",
+    });
+  }
 
   /**
    * เด้งไปขั้นที่มีช่องผิดทันทีที่ server ตอบกลับ
@@ -404,25 +432,68 @@ export function SenderForm({
             </Field>
           </div>
 
+          {/* ต้องเป็น type="button" ไม่งั้น Enter จะส่งฟอร์มตั้งแต่ขั้นแรก (กฎข้อ 2 หัวไฟล์) */}
+          <button
+            type="button"
+            onClick={fillHistoryNone}
+            className="flex h-12 w-full items-center justify-center rounded-lg border border-primary bg-background text-base font-semibold text-primary focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            ทั้ง 5 ช่องด้านล่าง &ldquo;ไม่มี&rdquo;
+          </button>
+
           <Field
             label="แพ้ยา"
             htmlFor={`${id}-da`}
             error={err.drugAllergy}
             hint="ถ้าไม่มี ให้เขียนว่า ไม่มี — ปลายทางต้องแยกออกระหว่าง ไม่แพ้ กับ ยังไม่ได้ถาม"
           >
-            <TextInput id={`${id}-da`} name="drugAllergy" maxLength={200} />
+            <TextInput
+              id={`${id}-da`}
+              name="drugAllergy"
+              maxLength={200}
+              value={history.drugAllergy}
+              onChange={(e) => setHistory((p) => ({ ...p, drugAllergy: e.target.value }))}
+            />
           </Field>
           <Field label="แพ้อาหาร" htmlFor={`${id}-fa`} error={err.foodAllergy}>
-            <TextInput id={`${id}-fa`} name="foodAllergy" maxLength={200} />
+            <TextInput
+              id={`${id}-fa`}
+              name="foodAllergy"
+              maxLength={200}
+              value={history.foodAllergy}
+              onChange={(e) => setHistory((p) => ({ ...p, foodAllergy: e.target.value }))}
+            />
           </Field>
           <Field label="โรคประจำตัว" htmlFor={`${id}-cc2`} error={err.chronicConditions}>
-            <TextArea id={`${id}-cc2`} name="chronicConditions" rows={2} maxLength={500} />
+            <TextArea
+              id={`${id}-cc2`}
+              name="chronicConditions"
+              rows={2}
+              maxLength={500}
+              value={history.chronicConditions}
+              onChange={(e) =>
+                setHistory((p) => ({ ...p, chronicConditions: e.target.value }))
+              }
+            />
           </Field>
           <Field label="ประวัติการเจ็บป่วยในอดีต" htmlFor={`${id}-ph`} error={err.pastHistory}>
-            <TextArea id={`${id}-ph`} name="pastHistory" rows={2} maxLength={500} />
+            <TextArea
+              id={`${id}-ph`}
+              name="pastHistory"
+              rows={2}
+              maxLength={500}
+              value={history.pastHistory}
+              onChange={(e) => setHistory((p) => ({ ...p, pastHistory: e.target.value }))}
+            />
           </Field>
           <Field label="ยาที่ใช้เป็นประจำ" htmlFor={`${id}-rm`} error={err.regularMeds}>
-            <TextInput id={`${id}-rm`} name="regularMeds" maxLength={300} />
+            <TextInput
+              id={`${id}-rm`}
+              name="regularMeds"
+              maxLength={300}
+              value={history.regularMeds}
+              onChange={(e) => setHistory((p) => ({ ...p, regularMeds: e.target.value }))}
+            />
           </Field>
 
           <div className="grid grid-cols-3 gap-3">
@@ -668,14 +739,13 @@ export function SenderForm({
           </Field>
         </div>
 
-        <Field
-          label="พิกัดจุดเกิดเหตุ"
-          htmlFor={`${id}-ig`}
-          error={err.injuryGrid}
-          hint="กรอกด้วยมือ ระบบไม่ดึงพิกัดให้ในช่องนี้"
-        >
-          <TextInput id={`${id}-ig`} name="injuryGrid" maxLength={120} className="tabular font-mono" />
-        </Field>
+        {/*
+          ตัดช่อง "พิกัดจุดเกิดเหตุ" (injuryGrid) ออกจากหน้าจอแล้ว (8 ก.ย. 2569)
+          ไม่มีใครกรอกจริงเพราะพิกัดที่ชุดลำเลียงต้องใช้คือ "จุดรับ" ในขั้นที่ 3 ไม่ใช่จุดเกิดเหตุ
+          คอลัมน์ case.injury_grid · zod · พารามิเตอร์ RPC ยังอยู่ครบโดยตั้งใจ
+          เพราะ form_test.sql ยังทดสอบมันอยู่ และผู้เรียก RPC รายอื่นยังส่งค่านี้ได้
+          เมื่อไม่มี input ในฟอร์ม FormData ก็ไม่มีคีย์นี้ → zod ให้ undefined → RPC ได้ null
+        */}
 
         <Field label="อุปกรณ์ป้องกันที่สวมอยู่" error={err.protectiveGear}>
           <fieldset className="grid grid-cols-2 gap-2">
@@ -724,6 +794,15 @@ export function SenderForm({
 
         <SubHead>ความปลอดภัยของชุดลำเลียง</SubHead>
         <div className="grid gap-3 sm:grid-cols-2">
+          {/*
+            ★ ช่องนี้ต้องไม่มี default — เคยลองตั้งเป็น "ปลอดภัย" แล้วถอยกลับ (8 ก.ย. 2569)
+              ทุกช่องอื่นในขั้นนี้ตั้งค่าเริ่มต้นได้เพราะเดาผิดแล้วแค่กรอกเกิน
+              แต่ช่องนี้บอกชุดลำเลียงว่าจุดรับปะทะอยู่หรือไม่ ถ้าเดาให้แล้วเดาผิด
+              คนที่ขับรถเข้าไปคือคนรับผลของการเดานั้น
+              "ยังไม่ระบุ" พูดความจริงว่ายังไม่มีใครตอบ ส่วน "ปลอดภัย" ที่ระบบใส่ให้เอง
+              แยกไม่ออกจาก "ปลอดภัย" ที่คนยืนยันมาจริง — ปลายทางจึงเชื่ออะไรไม่ได้เลย
+              นี่คือเหตุผลเดียวกับที่ห้าช่องประวัติในขั้น 1 ต้องมีปุ่มให้กดเอง ไม่ใช่เติมให้เงียบๆ
+          */}
           <Field label="สถานการณ์จุดรับ" htmlFor={`${id}-sec`} error={err.securityStatus}>
             <NativeSelect id={`${id}-sec`} name="securityStatus" defaultValue="">
               <option value="">ยังไม่ระบุ</option>
