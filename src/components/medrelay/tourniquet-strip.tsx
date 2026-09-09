@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
  *
  * ★ ทุกคนที่เห็นเคสกดคลายได้ ไม่ใช่แค่คนที่รัด
  *   บังคับโดย policy treatment_release ไม่ใช่โดยโค้ดนี้ (ดู tourniquet-actions.ts)
+ *   ข้อยกเว้นเดียวคือ canRelease ด้านล่าง ซึ่งเป็นกติกาหน้างาน ไม่ใช่สิทธิ์
  *
  * ★ ห้ามพึ่งสีอย่างเดียว
  *   ปุ่มแดง/เขียวมีข้อความ "ยังไม่คลาย" / "คลายแล้ว" กำกับเสมอ
@@ -26,6 +27,7 @@ export function TourniquetStrip({
   returnTo,
   className,
   compact = false,
+  canRelease = true,
 }: {
   items: readonly TourniquetItem[];
   /** เส้นทางที่จะ revalidate หลังกดคลาย — ส่งมาจากหน้าที่ใช้ */
@@ -33,6 +35,14 @@ export function TourniquetStrip({
   className?: string;
   /** ย่อสำหรับการ์ดในรายการ — ไม่มีปุ่มคลาย มีแต่สถานะ */
   compact?: boolean;
+  /**
+   * ผู้ป่วยอยู่ในมือคนที่กำลังดูอยู่หรือยัง (ดู src/lib/custody.ts)
+   *
+   * default เป็น true โดยเจตนา เพื่อไม่ให้ผู้เรียกเดิมทั้งหมดเปลี่ยนพฤติกรรม
+   * เมื่อ false จะแสดงป้ายสถานะแทนปุ่ม ซึ่งเป็นเส้นทางเดียวกับ compact
+   * — ไม่ใช่ปุ่ม disabled เพราะปุ่มที่กดไม่ได้ชวนให้เข้าใจว่าระบบพัง
+   */
+  canRelease?: boolean;
 }) {
   if (items.length === 0) return null;
 
@@ -74,7 +84,7 @@ export function TourniquetStrip({
               </p>
             </div>
 
-            {compact || !open ? (
+            {compact || !open || !canRelease ? (
               <span
                 className={cn(
                   "shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold",

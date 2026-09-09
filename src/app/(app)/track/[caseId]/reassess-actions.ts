@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { getProfile, hasAnyRole } from "@/lib/auth/profile";
+import { custodyOf } from "@/lib/custody";
 import { ASSESSOR_ROLES, isLegOpen } from "@/lib/leg-flow";
 import { createClient } from "@/lib/supabase/server";
 import type { AssessmentKind, TriageColor } from "@/lib/enums";
@@ -79,12 +80,27 @@ async function loadContext(caseId: string) {
    */
   const { data: legs } = await supabase
     .from("transfer_leg")
-    .select("id, leg_no, status, to_unit_id")
+    .select("id, leg_no, status, to_unit_id, transporter_id, handover_at")
     .eq("case_id", caseId)
     .order("leg_no", { ascending: true });
 
   if (!legs || legs.length === 0) {
     return { error: "ไม่พบทอดของเคสนี้ หรือบัญชีของคุณไม่มีสิทธิ์เห็นเคสนี้" } as const;
+  }
+
+  /**
+   * ★ ด่านที่สอง — บันทึกได้เฉพาะคนที่ผู้ป่วยอยู่ในมือ (custody.ts)
+   *
+   *   ต้องเช็คที่นี่ ไม่ใช่แค่ซ่อนฟอร์มบนหน้าจอ เพราะ server action
+   *   ถูกยิงตรงได้เสมอโดยไม่ผ่านปุ่มที่เราวาด — เหตุผลเดียวกับที่
+   *   role-gate.tsx เตือนไว้ว่า UI ไม่เคยเป็นด่านกัน
+   *
+   *   วางไว้ใน loadContext จึงคุมครบทั้งสาม action ในที่เดียว
+   *   ถ้าแยกไปเขียนในแต่ละ action วันหนึ่งจะมี action ที่สี่ที่ลืมใส่
+   */
+  const custody = custodyOf(profile, legs);
+  if (!custody.canRecordCare) {
+    return { error: custody.blockedReason! } as const;
   }
 
   const leg = legs.find((l) => isLegOpen(l.status)) ?? legs[legs.length - 1];

@@ -7,10 +7,12 @@ import { RelativeTime } from "@/components/medrelay/relative-time";
 import { TourniquetStrip } from "@/components/medrelay/tourniquet-strip";
 import { TriageChip } from "@/components/medrelay/triage-dot";
 import { getProfile } from "@/lib/auth/profile";
+import { custodyOf } from "@/lib/custody";
 import { createClient } from "@/lib/supabase/server";
 import { getTourniquets } from "@/lib/tourniquet";
 import type {
   AvpuLevel,
+  CaseOutcome,
   CaseStatus,
   LegStatus,
   PrecedenceLevel,
@@ -23,8 +25,12 @@ import {
   type PersonOption,
   type VehicleOption,
 } from "./leg-card";
-import { NextLegForm, type NextLegUnitOption } from "./next-leg-form";
-import { ReassessPanel } from "./reassess-forms";
+import {
+  DispositionSummary,
+  SendPatientForm,
+  type NextLegUnitOption,
+} from "./send-patient-form";
+import { AssessPanel, TreatmentsPanel } from "./reassess-forms";
 import { TX_LABEL } from "../../sender/schema";
 
 /**
@@ -128,7 +134,9 @@ export default async function Page({
       `id, case_code, precedence, triage, chief_complaint, patient_alias,
        patient_count, requested_at, closed_at, status, mechanism,
        pickup_marking, pickup_grid, patient_mobility, transport_mode,
+       origin_unit_id, outcome, disposition_route, icd10, feedback_note,
        origin:origin_unit_id (name_th),
+       dest:dest_unit_id (name_th),
        transfer_leg (
          id, leg_no, status, from_unit_id, to_unit_id,
          requested_at, dispatched_at, on_scene_at, departed_at, arrived_at, handover_at,
@@ -210,7 +218,7 @@ export default async function Page({
   const { data: rawTreatments } = await supabase
     .from("treatment")
     .select(
-      `id, tx_code, detail, dose, route, site, given_at, leg_id,
+      `id, tx_code, detail, dose, route, site, given_at, created_at, leg_id,
        giver:given_by (full_name, rank_th)`,
     )
     .eq("case_id", caseId)
@@ -231,16 +239,41 @@ export default async function Page({
     ...assessments.map((a) => ({
       type: "assessment" as const,
       at: a.assessed_at,
+      at2: a.assessed_at,
       row: a,
       legNo: a.leg_id ? legNoById.get(a.leg_id) : undefined,
     })),
     ...treatments.map((t) => ({
       type: "treatment" as const,
       at: t.given_at,
+      /** ตัวตัดสินเสมอชั้นที่สอง — ต้องมีเพื่อให้ลำดับตรงกับ getTourniquets() */
+      at2: t.created_at,
       row: t,
       legNo: t.leg_id ? legNoById.get(t.leg_id) : undefined,
     })),
-  ].sort((a, b) => a.at.localeCompare(b.at));
+  ]
+    /**
+     * เรียงตามเวลา แล้วตัดสินเสมอด้วย id
+     *
+     * ★ ห้ามเรียงด้วยเวลาอย่างเดียว — บทเรียนเดียวกับ src/lib/tourniquet.ts (8 ก.ย. 2569)
+     *   สายรัดหลายเส้นของเคสเดียวกันมี given_at เท่ากันสนิท เพราะช่อง datetime-local
+     *   ละเอียดแค่ระดับนาที และถูก insert ในคำสั่งเดียวกัน เมื่อคีย์เรียงเสมอกัน
+     *   Array.prototype.sort จะคงลำดับที่ PostgREST คืนมา ซึ่งไม่รับประกันว่าเหมือนเดิม
+     *
+     *   ผลที่เห็นจริงก่อนแก้ — สายรัดสองเส้นเรียงสลับกันระหว่างการ์ด "ผลประเมิน
+     *   ตลอดสายส่งกลับ" กับการ์ด "สายรัดห้ามเลือด" บนหน้าจอเดียวกัน
+     *   คนอ่านต้องมานั่งเดาว่าอันไหนคือเส้นที่ 1 ในสถานการณ์ที่กำลังนับเวลาขาดเลือด
+     *
+     *   คีย์ทั้งสามชุดนี้ต้องตรงกับ src/lib/tourniquet.ts ทุกตัว (given_at →
+     *   created_at → id) ไม่งั้นสองการ์ดยังเรียงไม่เหมือนกันอยู่ดี — id ไม่ซ้ำแน่นอน
+     *   ลำดับที่ได้จึงเป็น total order คงที่ทุกครั้งและตรงกันทั้งสองที่
+     */
+    .sort(
+      (a, b) =>
+        a.at.localeCompare(b.at) ||
+        a.at2.localeCompare(b.at2) ||
+        a.row.id.localeCompare(b.row.id),
+    );
 
   /**
    * ตัวเลือกสำหรับปุ่มจัดรถ ดึงเฉพาะตอนที่มีทอดรอจัดรถอยู่จริง
@@ -291,8 +324,15 @@ export default async function Page({
   /**
    * ทอดถัดไปเปิดได้ก็ต่อเมื่อทอดล่าสุดส่งมอบเสร็จแล้ว
    * (เงื่อนไขเดียวกับที่ startNextLeg ตรวจซ้ำอีกชั้นก่อน insert)
+   *
+   * ★ ยิง query นี้เฉพาะคนที่จะได้เห็นฟอร์มจริง ไม่ใช่ยิงก่อนแล้วค่อยซ่อน
+   *   รายชื่อหน่วยทั้งกองทัพไม่ควรถูกส่งไปถึงเครื่องของคนที่ไม่มีอะไรจะทำกับมัน
+   *   (หลักการเดียวกับที่ role-gate.tsx ห้ามไว้ตรงๆ)
    */
-  const canStartNextLeg = lastLeg?.status === "completed";
+  const canStartNextLeg =
+    lastLeg?.status === "completed" &&
+    profile !== null &&
+    profile.unitId === lastLeg.to_unit_id;
   let nextLegUnits: NextLegUnitOption[] = [];
 
   if (canStartNextLeg && lastLeg) {
@@ -302,7 +342,17 @@ export default async function Page({
       .eq("is_active", true)
       // ปลายทางของทอดใหม่ต้องไม่ใช่หน่วยที่ผู้ป่วยอยู่ตอนนี้ (constraint leg_units_differ)
       .neq("id", lastLeg.to_unit_id)
-      .order("role_level")
+      /**
+       * เรียงชั้นสูงขึ้นก่อน เพราะฟอร์มนี้ชื่อ "ส่งต่อชั้นการรักษาที่สูงกว่า"
+       * ตัวเลือกที่ตรงกับหัวข้อจึงควรอยู่บนสุด ไม่ใช่ให้เลื่อนหาเอง
+       *
+       * ★ ไม่ตัดหน่วยชั้นต่ำกว่าออกโดยเจตนา
+       *   ถ้ากรองด้วย role_level > ของหน่วยตัวเอง โรงพยาบาลชั้น 3 จะได้ dropdown
+       *   ว่างเปล่าทันทีเมื่อยังไม่มีหน่วยชั้น 4 ในระบบ ซึ่งทำให้ฟอร์มใช้ไม่ได้เลย
+       *   และการส่งข้างเคียง (ชั้นเดียวกันแต่คนละขีดความสามารถ) ก็เกิดขึ้นจริง
+       *   หน้าจอบอกชั้นของทุกตัวเลือกอยู่แล้ว ให้คนตัดสินดีกว่าปิดทางเงียบๆ
+       */
+      .order("role_level", { ascending: false })
       .order("name_th");
 
     nextLegUnits = (units ?? []).map((u) => ({
@@ -315,6 +365,27 @@ export default async function Page({
   const openLeg = rawLegs.find((l) => isLegOpen(l.status as LegStatus)) ?? null;
   const upcoming = openLeg ? nextStep(openLeg.status as LegStatus) : null;
   const caseStatus = row.status as CaseStatus;
+
+  /**
+   * ผู้ป่วยอยู่ในมือคนที่กำลังดูอยู่หรือยัง (src/lib/custody.ts)
+   *
+   * คิดฝั่ง server ที่นี่ที่เดียวแล้วส่งเป็น prop ลงไป — ไม่ส่ง id ของใคร
+   * ลง browser และไม่ให้ component ฝั่ง client เดาเอาเองจากบทบาท
+   * (หลักการเดียวกับ LegView.isAssignedTransporter ที่ 0023 วางไว้)
+   */
+  const custody = custodyOf(profile, rawLegs);
+
+  /**
+   * ส่งผู้ป่วยออกได้เมื่อทอดสุดท้ายปิดแล้ว และคนที่ดูอยู่คือหน่วยที่ถือผู้ป่วย
+   *
+   * ★ กันด้วยตัวตน ไม่ใช่ RoleGate roles={["receiver"]} อย่างของเดิม
+   *   บัญชีเดียวถือหลายบทบาท เขตหน้าที่มีบทบาท receiver ติดมาด้วย
+   *   ไม่ควรเห็นปุ่มส่งต่อของผู้ป่วยที่นอนอยู่โรงพยาบาลอื่น
+   */
+  const holdsPatient =
+    profile !== null && lastLeg !== null && profile.unitId === lastLeg.to_unit_id;
+  const canSendOnward = lastLeg?.status === "completed" && holdsPatient;
+  const outcome = (row.outcome as CaseOutcome | null) ?? null;
 
   return (
     <>
@@ -348,21 +419,7 @@ export default async function Page({
             </p>
           </div>
 
-          {/*
-            สายรัดห้ามเลือดอยู่เหนือทุกอย่าง ใต้แบนเนอร์สถานะ
-            เพราะเป็นข้อมูลเดียวในหน้านี้ที่มีนาฬิกาเดินอยู่และมีเส้นตายทางคลินิก
-            ทุกคนที่เห็นเคสกดคลายได้ ไม่จำกัดว่าต้องเป็นคนที่รัด (policy treatment_release)
-          */}
-          {tourniquets.length > 0 && (
-            <section className="rounded-xl border border-border bg-card p-4">
-              <TourniquetStrip
-                items={tourniquets}
-                returnTo={`/track/${caseId}`}
-                className="border-t-0 pt-0"
-              />
-            </section>
-          )}
-
+          {/* ① ข้อมูลผู้ป่วย — คำถามแรกของทุกคนที่เปิดเคสคือ "ใครและเป็นอะไร" */}
           <section className="space-y-3 rounded-xl border border-border bg-card p-4">
             <div className="flex flex-wrap items-center gap-2">
               <PrecedenceBadge value={row.precedence as PrecedenceLevel} />
@@ -435,46 +492,7 @@ export default async function Page({
             </dl>
           </section>
 
-          <div className="space-y-3">
-            <h2 className="text-lg font-semibold">
-              ทอดการส่งกลับ{" "}
-              <span className="font-normal text-muted-foreground">
-                ({legs.length} ทอด)
-              </span>
-            </h2>
-            {legs.map((leg, i) => (
-              <LegCard
-                key={leg.id}
-                leg={leg}
-                vehicles={vehicles}
-                transporters={transporters}
-                isLast={i === legs.length - 1}
-              />
-            ))}
-          </div>
-
-          {/*
-            ประเมินซ้ำ — วางใต้ส่วนจัดรถตามที่เจ้าของโครงการสั่ง
-            นายสิบพยาบาลประจำรถประเมินผู้ป่วยก่อนขึ้นรถ ตรงนี้คือที่ลงบันทึกนั้น
-            กางไว้เองเมื่อทอดยังเดินอยู่ เพราะนั่นคือตอนที่มีคนต้องใช้จริง
-          */}
-          <div className="space-y-3">
-            <ReassessPanel
-              caseId={caseId}
-              currentTriage={(row.triage as TriageColor | null) ?? null}
-              open={openLeg !== undefined}
-            />
-          </div>
-
-          {canStartNextLeg && lastLeg && (
-            <NextLegForm
-              caseId={row.id}
-              currentUnitName={one(lastLeg.to_unit)?.name_th ?? "หน่วยปลายทาง"}
-              units={nextLegUnits}
-            />
-          )}
-
-          {/* ผลประเมินเดินทางไปกับผู้ป่วยข้ามทุกทอด ไม่ต้องคัดลอกข้อมูล */}
+          {/* ② ผลประเมินเดินทางไปกับผู้ป่วยข้ามทุกทอด ไม่ต้องคัดลอกข้อมูล */}
           <section className="rounded-xl border border-border bg-card p-4">
             <h2 className="text-lg font-semibold">ผลประเมินตลอดสายส่งกลับ</h2>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -570,6 +588,95 @@ export default async function Page({
               </ol>
             )}
           </section>
+
+          {/* ③ ทอดการส่งกลับ — ปุ่มเดินสถานะและปุ่มรับผู้ป่วยอยู่ในนี้ */}
+          <div className="space-y-3">
+            <h2 className="text-lg font-semibold">
+              ทอดการส่งกลับ{" "}
+              <span className="font-normal text-muted-foreground">
+                ({legs.length} ทอด)
+              </span>
+            </h2>
+            {legs.map((leg, i) => (
+              <LegCard
+                key={leg.id}
+                leg={leg}
+                vehicles={vehicles}
+                transporters={transporters}
+                isLast={i === legs.length - 1}
+              />
+            ))}
+          </div>
+
+          {/*
+            ④ ประเมินผู้ป่วย — วางใต้การ์ดทอดตามที่เจ้าของโครงการสั่ง
+            นายสิบพยาบาลประจำรถประเมินก่อนขึ้นรถ ปลายทางประเมินอีกครั้งตอนรับตัว
+          */}
+          <AssessPanel
+            caseId={caseId}
+            currentTriage={(row.triage as TriageColor | null) ?? null}
+            /**
+             * กางจนกว่าผู้ป่วยจะถูกจำหน่ายออกจากระบบ
+             *
+             * ⚠ ของเดิมเขียนว่า openLeg !== undefined ซึ่งเป็นจริงเสมอ
+             *   เพราะบรรทัดที่ประกาศ openLeg ปิดท้ายด้วย ?? null ค่าจึงไม่เคยเป็น undefined
+             *
+             * ⚠⚠ และ "ทอดยังเดินอยู่" (openLeg !== null) ก็ใช้เป็นเงื่อนไขไม่ได้
+             *     เพราะจังหวะที่ผู้รับต้องประเมินมากที่สุดคือ "หลังกดรับผู้ป่วย"
+             *     ซึ่งเป็นจังหวะที่ทุกทอดปิดพอดี — เงื่อนไขนั้นจะพับกล่องทิ้ง
+             *     ตรงจังหวะที่ต้องใช้ที่สุด (เขียนผิดไปรอบหนึ่งแล้ว เทสต์จับได้)
+             *
+             * เงื่อนไขที่ถูกคือ "ผู้ป่วยยังอยู่ในระบบ" — จำหน่ายแล้วค่อยพับ
+             */
+            open={outcome === null}
+            custody={custody}
+          />
+
+          {/*
+            ⑤ สายรัดห้ามเลือด
+
+            ★ เคยอยู่บนสุดของหน้าใต้แบนเนอร์สถานะ ด้วยเหตุผลว่าเป็นข้อมูลเดียว
+              ที่มีนาฬิกาเดินอยู่และมีเส้นตายทางคลินิก — 9 ก.ย. 2569 เจ้าของโครงการ
+              สั่งย้ายลงมาตรงนี้ เพราะลำดับบนหน้าจอควรเดินตามลำดับที่มือทำจริง
+              ปลายทางรับตัว → ประเมิน → ดูว่าติดสายรัดมากี่เส้น → ลงการรักษาเพิ่ม
+              นาฬิกาไม่ได้หายไปไหน ยังนับอยู่และยังโผล่บนการ์ดในหน้ารายการทุกหน้า
+
+            ★ ปุ่มคลายโผล่เฉพาะเมื่อผู้ป่วยอยู่ในมือคนที่ดูอยู่ (custody.ts)
+              คนอื่นเห็นเป็นป้ายสถานะ — เห็นนาฬิกาได้ แต่กดคลายไม่ได้
+          */}
+          {tourniquets.length > 0 && (
+            <section className="rounded-xl border border-border bg-card p-4">
+              <TourniquetStrip
+                items={tourniquets}
+                returnTo={`/track/${caseId}`}
+                className="border-t-0 pt-0"
+                canRelease={custody.canRecordCare}
+              />
+            </section>
+          )}
+
+          {/* ⑥ บันทึกการรักษา — ใต้รายการสายรัดตามลำดับที่มือทำจริง */}
+          <TreatmentsPanel caseId={caseId} custody={custody} />
+
+          {/* ⑦ ส่งผู้ป่วยออก — จำหน่ายไปแล้วก็แสดงผลแทน ไม่ยื่นฟอร์มให้กดซ้ำ */}
+          {outcome ? (
+            <DispositionSummary
+              outcome={outcome}
+              destUnitName={one(row.dest)?.name_th ?? null}
+              icd10={row.icd10}
+              feedbackNote={row.feedback_note}
+            />
+          ) : (
+            canSendOnward &&
+            lastLeg && (
+              <SendPatientForm
+                caseId={row.id}
+                currentUnitName={one(lastLeg.to_unit)?.name_th ?? "หน่วยปลายทาง"}
+                originUnitName={origin?.name_th ?? "หน่วยต้นทาง"}
+                units={nextLegUnits}
+              />
+            )
+          )}
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Link

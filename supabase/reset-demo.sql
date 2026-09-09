@@ -124,7 +124,7 @@ update public."case"
 --    ที่เหลือว่าง ยกเว้น DEMO-04 ที่ชุดจำลองตั้งเป็นซ่อมบำรุงไว้แต่แรก
 --    (ตั้งใจให้มีรถที่จัดไม่ได้อย่างน้อยหนึ่งคัน จะได้เห็นว่ากระดานแยกสถานะจริง)
 -- -------------------------------------------------------------
-update public.vehicle set status = 'available'   where call_sign in ('DEMO-02','DEMO-03','DEMO-05','DEMO-06','DEMO-07');
+update public.vehicle set status = 'available'   where call_sign in ('DEMO-02','DEMO-03','DEMO-05','DEMO-06','DEMO-07','DEMO-08','DEMO-09','DEMO-10');
 update public.vehicle set status = 'dispatched'  where call_sign = 'DEMO-01';
 update public.vehicle set status = 'maintenance' where call_sign = 'DEMO-04';
 

@@ -173,9 +173,9 @@ test.describe("ประเมินซ้ำ + ส่งมอบสองฝ�
     /* ── 5. ส่งมอบฝ่ายแรก — ทอดต้องยังไม่ปิด ───────────────────── */
     await page.getByRole("button", { name: "ส่งมอบผู้ป่วย" }).click();
     // ข้อความบอกหน่วยปลายทางด้วยตั้งแต่ 0023 — ชุดลำเลียงไม่ได้อยู่หน่วยนั้น
-    // จึงเห็นเป็น "รอผู้รับที่ <หน่วย> กดยืนยันรับมอบ ทอดจึงจะปิด"
+    // จึงเห็นเป็น "รอผู้รับที่ <หน่วย> กดรับผู้ป่วยเข้ารักษา ทอดจึงจะปิด"
     await expect(
-      page.getByText(/^รอผู้รับที่ .* กดยืนยันรับมอบ ทอดจึงจะปิด$/),
+      page.getByText(/^รอผู้รับที่ .* กดรับผู้ป่วยเข้ารักษา ทอดจึงจะปิด$/),
     ).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("ชุดลำเลียงส่งมอบแล้ว")).toBeVisible();
     console.log(`\n>>> ฝ่ายแรกส่งมอบแล้ว ทอดยังไม่ปิด (ถูกต้อง)\n`);
@@ -197,7 +197,7 @@ test.describe("ประเมินซ้ำ + ส่งมอบสองฝ�
     await login(page, `/track/${caseId}`, RECEIVER);
     await page.goto(`/track/${caseId}`);
 
-    await page.getByRole("button", { name: "ยืนยันรับมอบผู้ป่วย" }).click();
+    await page.getByRole("button", { name: "รับผู้ป่วยเข้ารักษา" }).click();
     await expect(page.getByText("ส่งกลับเสร็จ").first()).toBeVisible({
       timeout: 30_000,
     });

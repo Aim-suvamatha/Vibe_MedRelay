@@ -147,7 +147,7 @@ export function isLegOpen(status: LegStatus): boolean {
  *
  * ขั้นสุดท้ายต่างจากอีกห้าขั้นตรงที่ต้องมีคนกดสองคน ไม่ใช่คนเดียว
  *   ฝ่ายแรก  ชุดลำเลียง  กด "ส่งมอบผู้ป่วย" พร้อมรายการตรวจ ทบ.466-903
- *   ฝ่ายที่สอง ผู้รับปลายทาง กด "ยืนยันรับมอบ" แล้วทอดจึงปิด
+ *   ฝ่ายที่สอง ผู้รับปลายทาง กด "รับผู้ป่วยเข้ารักษา" แล้วทอดจึงปิด
  *
  * ระหว่างรอฝ่ายที่สอง ทอดยังมีสถานะ 'arrived' อยู่ — ไม่มีสถานะที่เจ็ด
  * เพราะ leg_time_order กับ LEG_FLOW ผูกกันแบบหนึ่งสถานะต่อหนึ่งเวลา
@@ -167,7 +167,7 @@ export function isLegOpen(status: LegStatus): boolean {
  */
 export const HANDOVER_OFFER_ROLES: readonly AppRole[] = ["transporter"];
 
-/** บทบาทที่กด "ยืนยันรับมอบ" (ฝ่ายที่สอง) ได้ */
+/** บทบาทที่กด "รับผู้ป่วยเข้ารักษา" (ฝ่ายที่สอง) ได้ */
 export const HANDOVER_CONFIRM_ROLES: readonly AppRole[] = ["receiver"];
 
 /**

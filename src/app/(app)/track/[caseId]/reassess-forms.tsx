@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 
 import { RoleGate } from "@/components/medrelay/role-gate";
 import { TriageDot } from "@/components/medrelay/triage-dot";
+import type { CustodyState } from "@/lib/custody";
 import type { TriageColor } from "@/lib/enums";
 import { ASSESSOR_ROLES } from "@/lib/leg-flow";
 import { TRIAGE } from "@/lib/triage";
@@ -32,6 +33,11 @@ import {
  *
  * ★ RoleGate ที่นี่เป็น UX ล้วน ด่านจริงอยู่ใน reassess-actions.ts
  *   ซึ่งเช็ค hasAnyRole() ฝั่ง server ก่อนเขียนทุกครั้ง
+ *
+ * ★ แยกเป็นสอง export ตั้งแต่ 9 ก.ย. 2569 (คำสั่งเจ้าของโครงการ)
+ *   AssessPanel (สี + V/S) กับ TreatmentsCard (การรักษา) ไม่ได้อยู่ติดกันแล้ว
+ *   เพราะการ์ดสายรัดห้ามเลือดคั่นกลาง ตามลำดับที่ปลายทางทำงานจริง —
+ *   ประเมินก่อน แล้วดูสายรัดที่ติดตัวมา แล้วจึงลงว่าให้การรักษาอะไรเพิ่ม
  */
 
 /** ลำดับเดียวกับปุ่มความเร่งด่วนขั้นที่ 2 ของฟอร์มผู้ส่ง เพื่อให้มือจำตำแหน่งได้ */
@@ -212,21 +218,39 @@ function TreatmentsForm({ caseId }: { caseId: string }) {
 }
 
 /* -------------------------------------------------------------
- * กล่องรวม — พับไว้ด้วย <details> ของ HTML แท้
+ * กล่องบอกว่าทำไมยังบันทึกไม่ได้ — ใช้ร่วมทั้งสอง panel
  *
- * เหตุผลเดียวกับที่ leg-card.tsx ใช้ <details> คือไม่ต้องพึ่ง JavaScript
- * และ screen reader หาเจอแม้ยังพับอยู่ · เปิดค้างไว้เมื่อทอดยังเดินอยู่
- * เพราะนั่นคือตอนที่มีคนต้องใช้จริง
+ * แสดงข้อความแทนที่จะวาดฟอร์มแล้ว disable ปุ่ม เพราะฟอร์มที่กรอกได้
+ * แต่กดไม่ได้ทำให้คนหน้างานคิดว่าระบบพัง แล้วกดซ้ำอยู่อย่างนั้น
+ * ★ ข้อความมาจาก custody.blockedReason ที่คิดฝั่ง server ที่เดียว
+ *   จึงตรงกับข้อความที่ server action จะตอบกลับถ้ามีคนยิงตรงเข้ามา
  * ----------------------------------------------------------- */
-export function ReassessPanel({
+function LockedNote({ reason }: { reason: string }) {
+  return (
+    <p className="rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
+      🔒 {reason}
+    </p>
+  );
+}
+
+/* -------------------------------------------------------------
+ * กล่องรวม 1 — ประเมินผู้ป่วย (สี + สัญญาณชีพ)
+ *
+ * พับด้วย <details> ของ HTML แท้ ด้วยเหตุผลเดียวกับ leg-card.tsx
+ * คือไม่ต้องพึ่ง JavaScript และ screen reader หาเจอแม้ยังพับอยู่
+ * เปิดค้างไว้เมื่อทอดยังเดินอยู่ เพราะนั่นคือตอนที่มีคนต้องใช้จริง
+ * ----------------------------------------------------------- */
+export function AssessPanel({
   caseId,
   currentTriage,
   open,
+  custody,
 }: {
   caseId: string;
   currentTriage: TriageColor | null;
   /** ทอดยังเดินอยู่หรือไม่ — ใช้ตัดสินว่าจะกางไว้เลยไหม */
   open: boolean;
+  custody: CustodyState;
 }) {
   return (
     <RoleGate roles={ASSESSOR_ROLES}>
@@ -235,23 +259,58 @@ export function ReassessPanel({
         className="rounded-xl border border-border bg-muted/30 p-4"
       >
         <summary className="cursor-pointer text-lg font-semibold">
-          ประเมินผู้ป่วยซ้ำ
+          ประเมินผู้ป่วย
           <span className="ml-2 text-sm font-normal text-muted-foreground">
-            ก่อนขึ้นรถหรือระหว่างทาง
+            เมื่อถึงจุดส่งต่อใหม่
           </span>
         </summary>
 
-        <p className="mt-2 text-sm text-muted-foreground">
-          เวลาผ่านไปอาการเปลี่ยนได้ — บันทึกทีละอย่างตามที่ทำจริง
-          แต่ละปุ่มลงเวลาแยกกัน
-        </p>
-
-        <div className="mt-3 space-y-3">
-          <TriageForm caseId={caseId} current={currentTriage} />
-          <VitalsForm caseId={caseId} />
-          <TreatmentsForm caseId={caseId} />
-        </div>
+        {custody.canRecordCare ? (
+          <>
+            <p className="mt-2 text-sm text-muted-foreground">
+              เวลาผ่านไปอาการเปลี่ยนได้ — บันทึกทีละอย่างตามที่ทำจริง
+              แต่ละปุ่มลงเวลาแยกกัน
+            </p>
+            <div className="mt-3 space-y-3">
+              <TriageForm caseId={caseId} current={currentTriage} />
+              <VitalsForm caseId={caseId} />
+            </div>
+          </>
+        ) : (
+          <div className="mt-3">
+            <LockedNote reason={custody.blockedReason!} />
+          </div>
+        )}
       </details>
+    </RoleGate>
+  );
+}
+
+/* -------------------------------------------------------------
+ * กล่องรวม 2 — บันทึกการรักษา
+ *
+ * อยู่ใต้การ์ดสายรัดห้ามเลือดโดยเจตนา ปลายทางดูว่าติดสายรัดมากี่เส้น
+ * แล้วจึงลงว่าให้อะไรเพิ่ม — ลำดับเดียวกับที่มือทำจริง
+ * ----------------------------------------------------------- */
+export function TreatmentsPanel({
+  caseId,
+  custody,
+}: {
+  caseId: string;
+  custody: CustodyState;
+}) {
+  return (
+    <RoleGate roles={ASSESSOR_ROLES}>
+      {custody.canRecordCare ? (
+        <TreatmentsForm caseId={caseId} />
+      ) : (
+        <Card
+          title="บันทึกการรักษาที่ให้"
+          hint="เมนูหัตถการชุดเดียวกับที่เขตหน้าใช้ · ทุกรายการมีเวลากำกับ"
+        >
+          <LockedNote reason={custody.blockedReason!} />
+        </Card>
+      )}
     </RoleGate>
   );
 }

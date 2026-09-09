@@ -15,6 +15,7 @@ import {
   type AirwayStatus,
   type ArmedBranch,
   type AvpuLevel,
+  type CaseOutcome,
   type ChestStatus,
   type PatientCategory,
   type PrecedenceLevel,
@@ -406,6 +407,22 @@ export type EvacRequestState = {
 };
 
 export const PRECEDENCE_VALUES_RO: readonly PrecedenceLevel[] = PRECEDENCE_VALUES;
+
+/**
+ * ผลการรักษาตามช่องท้ายตาราง ทบ.466-900 — ปลายทางเป็นคนลงตอนจำหน่ายผู้ป่วย
+ * ต้องตรงกับ enum case_outcome ใน 0012 ทุกค่า
+ */
+export const OUTCOME_VALUES: readonly CaseOutcome[] = [
+  "recovered",
+  "hospitalized",
+  "died",
+];
+
+export const OUTCOME_LABEL: Record<CaseOutcome, string> = {
+  recovered: "หาย · กลับปฏิบัติหน้าที่ได้",
+  hospitalized: "คงพยาบาล · ยังต้องรักษาต่อ",
+  died: "ตาย",
+};
 
 /* ────────────────────────────────────────────────────────────
  * ป้ายภาษาไทยของ enum ที่ใช้ในฟอร์มนี้

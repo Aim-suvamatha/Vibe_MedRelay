@@ -354,17 +354,22 @@ function HandoverForm({ leg }: { leg: LegView }) {
       <ErrorNote message={state.error} />
       <SubmitButton>ส่งมอบผู้ป่วย</SubmitButton>
       <p className="text-center text-xs text-muted-foreground">
-        กดแล้วทอดยังไม่ปิด — ผู้รับปลายทางต้องกดยืนยันอีกครั้ง
+        กดแล้วทอดยังไม่ปิด — ผู้รับปลายทางต้องกดรับผู้ป่วยอีกครั้ง
       </p>
     </form>
   );
 }
 
 /* -------------------------------------------------------------
- * ยืนยันรับมอบ — ฝ่ายที่สองของการส่งมอบ (0022)
+ * รับผู้ป่วยเข้ารักษา — ฝ่ายที่สองของการส่งมอบ (0022)
  *
  * ★ ปุ่มนี้คือปุ่มเดียวที่ปิดทอดได้ และกดได้ก็ต่อเมื่อฝ่ายแรกกดแล้ว
  *   constraint leg_time_order บังคับลำดับนี้ที่ฐานข้อมูลอีกชั้น
+ *
+ * ★ ตั้งแต่ 9 ก.ย. 2569 ปุ่มนี้ยังเป็น "เส้นแบ่งความรับผิดชอบทางคลินิก" ด้วย
+ *   ก่อนกด ปลายทางบันทึกผลประเมิน · การรักษา · คลายสายรัด ไม่ได้เลย (custody.ts)
+ *   ข้อความจึงเปลี่ยนจาก "ยืนยันรับมอบผู้ป่วย" เป็น "รับผู้ป่วยเข้ารักษา"
+ *   เพราะสิ่งที่เกิดขึ้นจริงคือการรับตัวเข้ากระบวนการรักษา ไม่ใช่แค่เซ็นรับของ
  * ----------------------------------------------------------- */
 function ConfirmHandoverForm({ leg }: { leg: LegView }) {
   const [state, formAction] = useActionState<LegActionState, FormData>(
@@ -377,7 +382,11 @@ function ConfirmHandoverForm({ leg }: { leg: LegView }) {
       <input type="hidden" name="legId" value={leg.id} />
       <input type="hidden" name="target" value="completed" />
       <ErrorNote message={state.error} />
-      <SubmitButton>ยืนยันรับมอบผู้ป่วย</SubmitButton>
+      <SubmitButton>รับผู้ป่วยเข้ารักษา</SubmitButton>
+      <p className="text-center text-xs text-muted-foreground">
+        กดแล้วผู้ป่วยจึงอยู่ในความดูแลของหน่วยนี้ — บันทึกผลประเมิน
+        การรักษา และคลายสายรัดได้หลังจากนี้
+      </p>
     </form>
   );
 }
@@ -474,8 +483,12 @@ export function LegCard({
         )}
 
         {/* details ของ HTML แท้ — พับได้โดยไม่ต้องพึ่ง JavaScript
-            เส้นเวลาอยู่ใน DOM เสมอ screen reader จึงหาเจอแม้ยังพับอยู่ */}
-        <details open={isLast}>
+            เส้นเวลาอยู่ใน DOM เสมอ screen reader จึงหาเจอแม้ยังพับอยู่
+
+            ทอดที่ปิดแล้วพับไว้แม้จะเป็นทอดสุดท้าย (คำสั่งเจ้าของโครงการ 9 ก.ย.)
+            เพราะหลังรับผู้ป่วยเข้ารักษา งานที่เหลืออยู่ข้างล่างทั้งหมด
+            เส้นเวลาที่เดินจบแล้วกางค้างไว้มีแต่ดันของที่ต้องใช้ให้ตกจอ */}
+        <details open={isLast && !done}>
           <summary className="flex h-12 cursor-pointer list-none items-center justify-center rounded-lg border border-border text-sm font-semibold focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
             เส้นเวลาของทอดนี้
           </summary>
@@ -569,7 +582,7 @@ export function LegCard({
               </RoleGate>
             ) : (
               <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                รอผู้รับที่ {leg.toUnit} กดยืนยันรับมอบ ทอดจึงจะปิด
+                รอผู้รับที่ {leg.toUnit} กดรับผู้ป่วยเข้ารักษา ทอดจึงจะปิด
               </p>
             )}
           </div>
