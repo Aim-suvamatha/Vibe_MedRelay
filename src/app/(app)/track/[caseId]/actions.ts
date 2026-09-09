@@ -315,12 +315,16 @@ export async function startNextLeg(
   const precedence = str(formData, "precedence") as PrecedenceLevel | "";
   const transportMode = str(formData, "transportMode");
   const reason = str(formData, "reason");
+  const diagnosis = str(formData, "diagnosis");
+  const icd10 = str(formData, "icd10").toUpperCase();
 
   if (!caseId) return { error: "ไม่พบเคสที่ต้องการส่งทอดถัดไป" };
   if (!toUnitId) return { error: "กรุณาเลือกหน่วยปลายทางของทอดถัดไป" };
   if (!precedence || !PRECEDENCE_VALUES_RO.includes(precedence)) {
     return { error: "กรุณาเลือกความเร่งด่วนของการส่งต่อ" };
   }
+  const icdBad = icd10Error(icd10);
+  if (icdBad) return { error: icdBad };
 
   const supabase = await createClient();
 
@@ -405,6 +409,9 @@ export async function startNextLeg(
       precedence,
       disposition_route: "evac_chain",
       dest_unit_id: toUnitId,
+      // วินิจฉัยของแพทย์ปลายทางเดินทางไปกับเคส ปลายทางถัดไปจะได้ไม่ต้องเริ่มจากศูนย์
+      ...(diagnosis ? { diagnosis: diagnosis.slice(0, 500) } : {}),
+      ...(icd10 ? { icd10 } : {}),
       ...(transportMode ? { transport_mode: transportMode as TransportMode } : {}),
     })
     .eq("id", caseId)
@@ -420,6 +427,18 @@ export async function startNextLeg(
   }
 
   return {};
+}
+
+/**
+ * ตรวจรูปแบบ ICD-10 ให้ตรงกับ constraint case_icd10_format ใน 0013
+ * คืน error เป็นข้อความไทยแทนที่จะปล่อยให้ฐานข้อมูลปฏิเสธด้วย 23514
+ * ซึ่งผู้ใช้อ่านแล้วไม่รู้ว่าต้องแก้ช่องไหน
+ */
+function icd10Error(code: string): string | null {
+  if (!code) return null;
+  return /^[A-TV-Z][0-9]{2}(\.[0-9A-Z]{1,4})?$/.test(code)
+    ? null
+    : "รูปแบบรหัส ICD-10 ไม่ถูกต้อง เช่น S72.3 — เว้นว่างได้ถ้าจำไม่ได้";
 }
 
 /* =============================================================
@@ -446,7 +465,8 @@ export async function dischargeToUnit(
 ): Promise<LegActionState> {
   const caseId = str(formData, "caseId");
   const outcome = str(formData, "outcome") as CaseOutcome | "";
-  const icd10 = str(formData, "icd10");
+  const diagnosis = str(formData, "diagnosis");
+  const icd10 = str(formData, "icd10").toUpperCase();
   const feedbackNote = str(formData, "feedbackNote");
 
   if (!caseId) return { error: "ไม่พบเคสที่ต้องการบันทึกการส่งคืน" };
@@ -479,9 +499,8 @@ export async function dischargeToUnit(
     .maybeSingle();
   if (!caseRow) return { error: "ไม่พบเคสนี้ หรือบัญชีของคุณไม่มีสิทธิ์เห็นเคสนี้" };
 
-  if (icd10 && !/^[A-TV-Z][0-9]{2}(\.[0-9A-Z]{1,4})?$/.test(icd10)) {
-    return { error: "รูปแบบรหัส ICD-10 ไม่ถูกต้อง เช่น S81.0 — เว้นว่างได้ถ้ายังไม่ทราบ" };
-  }
+  const icdBad = icd10Error(icd10);
+  if (icdBad) return { error: icdBad };
 
   const { data: touched, error } = await supabase
     .from("case")
@@ -489,6 +508,7 @@ export async function dischargeToUnit(
       outcome,
       disposition_route: "returned_to_unit",
       dest_unit_id: caseRow.origin_unit_id,
+      diagnosis: diagnosis ? diagnosis.slice(0, 500) : null,
       icd10: icd10 || null,
       feedback_note: feedbackNote ? feedbackNote.slice(0, 1000) : null,
     })

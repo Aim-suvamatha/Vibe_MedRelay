@@ -7,9 +7,15 @@ import { RelativeTime } from "@/components/medrelay/relative-time";
 import { TourniquetStrip } from "@/components/medrelay/tourniquet-strip";
 import { TriageChip } from "@/components/medrelay/triage-dot";
 import { getProfile } from "@/lib/auth/profile";
+import {
+  groupByStation,
+  stationsOf,
+  type CareStation,
+} from "@/lib/care-timeline";
 import { custodyOf } from "@/lib/custody";
 import { createClient } from "@/lib/supabase/server";
 import { getTourniquets } from "@/lib/tourniquet";
+import { AVPU_LABEL, vitalsLine } from "@/lib/vitals";
 import type {
   AvpuLevel,
   CaseOutcome,
@@ -56,19 +62,6 @@ const CASE_STATUS_LABEL: Record<CaseStatus, string> = {
   cancelled: "ยกเลิก",
 };
 
-const AVPU_LABEL: Record<AvpuLevel, string> = {
-  alert: "ตื่นดี",
-  voice: "เรียกตื่น",
-  pain: "เจ็บตื่น",
-  unresponsive: "ไม่ตื่น",
-};
-
-const ASSESSMENT_KIND_LABEL: Record<string, string> = {
-  initial: "แรกรับ",
-  enroute: "ระหว่างเดินทาง",
-  handover: "ตอนส่งมอบ",
-};
-
 const MOBILITY_LABEL: Record<string, string> = {
   litter_dependent: "นอนเปล ช่วยเหลือตัวเองไม่ได้",
   litter_assisted: "นอนเปล ช่วยเหลือตัวเองได้บ้าง",
@@ -98,8 +91,17 @@ function personName(
   return p.rank_th ? `${p.rank_th} ${p.full_name}` : p.full_name;
 }
 
-/** สัญญาณชีพเป็นบรรทัดเดียว ข้ามค่าที่วัดไม่ได้ — หน้างานมักวัดไม่ครบ */
-function vitalsLine(a: {
+/* -------------------------------------------------------------
+ * รูปร่างของรายการบนเส้นเวลา — ประกาศไว้เพราะ component อยู่นอก Page
+ * จึง infer จากผลของ query ตรงๆ ไม่ได้ ต้องตรงกับ select ด้านล่างเสมอ
+ * ----------------------------------------------------------- */
+type MaybePerson =
+  | { full_name: string; rank_th: string | null }
+  | { full_name: string; rank_th: string | null }[]
+  | null;
+
+type TimelineAssessment = {
+  id: string;
   gcs: number | null;
   sbp: number | null;
   dbp: number | null;
@@ -107,16 +109,149 @@ function vitalsLine(a: {
   resp_rate: number | null;
   spo2: number | null;
   temperature: number | null;
-}): string {
-  const parts: string[] = [];
-  if (a.sbp !== null && a.dbp !== null) parts.push(`BP ${a.sbp}/${a.dbp}`);
-  else if (a.sbp !== null) parts.push(`SBP ${a.sbp}`);
-  if (a.pulse !== null) parts.push(`P ${a.pulse}`);
-  if (a.resp_rate !== null) parts.push(`RR ${a.resp_rate}`);
-  if (a.spo2 !== null) parts.push(`SpO₂ ${a.spo2}%`);
-  if (a.temperature !== null) parts.push(`T ${a.temperature}°C`);
-  if (a.gcs !== null) parts.push(`GCS ${a.gcs}`);
-  return parts.join(" · ");
+  avpu: string | null;
+  triage: string | null;
+  findings: string | null;
+  treatment: string | null;
+  assessed_at: string;
+  assessor: MaybePerson;
+};
+
+type TimelineTreatment = {
+  id: string;
+  tx_code: keyof typeof TX_LABEL;
+  detail: string | null;
+  dose: string | null;
+  route: string | null;
+  site: string | null;
+  giver: MaybePerson;
+};
+
+type TimelineEntry =
+  | { type: "assessment"; at: string; at2: string; row: TimelineAssessment }
+  | { type: "treatment"; at: string; at2: string; row: TimelineTreatment };
+
+/* -------------------------------------------------------------
+ * การ์ดของหนึ่ง "จุด" บนสายส่งกลับ
+ *
+ * ★ หัวข้อจุดแทนป้าย "ทอด N" กับ "แรกรับ/ตอนส่งมอบ" ที่เคยติดรายรายการ
+ *   ป้ายเดิมบอกได้แค่ว่าเกิดในทอดไหน ซึ่งไม่พอ เพราะทอดเดียวมีสามจุดดูแล
+ *   (ต้นทาง · บนรถ · ปลายทาง) ผลของเขตหน้ากับของโรงพยาบาลจึงเคยปนกันอยู่
+ *   ในกลุ่ม "ทอด 1" เดียวกัน — หัวข้อจุดตอบตรงคำถามที่คนอ่านถามจริง
+ * ----------------------------------------------------------- */
+function StationCard({
+  station,
+  events,
+  isHere,
+}: {
+  station: CareStation;
+  events: TimelineEntry[];
+  isHere: boolean;
+}) {
+  return (
+    <section
+      className={cnStation(isHere)}
+      aria-label={`บันทึกที่ ${station.label}`}
+    >
+      <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <h3 className="text-base font-semibold">{station.label}</h3>
+        {isHere && (
+          // บอกด้วยข้อความ ไม่พึ่งสีขอบอย่างเดียว (เกณฑ์เดียวกับ TriageDot)
+          <span className="rounded-full border border-primary bg-background px-2 py-0.5 text-xs font-semibold">
+            จุดนี้
+          </span>
+        )}
+        <span className="ml-auto text-xs text-muted-foreground">
+          {events.length} รายการ
+        </span>
+      </header>
+      {station.sublabel && (
+        <p className="mt-0.5 text-sm text-muted-foreground">{station.sublabel}</p>
+      )}
+
+      {events.length === 0 ? (
+        <p className="mt-2 text-sm text-muted-foreground">
+          ยังไม่มีบันทึกที่จุดนี้
+        </p>
+      ) : (
+        <ol className="mt-2.5 space-y-2">
+          {events.map((ev) => (
+            <li key={`${ev.type}-${ev.row.id}`}>
+              <TimelineEvent ev={ev} />
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
+/** ขอบเน้นเฉพาะจุดที่ผู้ป่วยอยู่ตอนนี้ ที่เหลือเป็นขอบปกติ */
+function cnStation(isHere: boolean): string {
+  const base = "rounded-xl border p-3";
+  return isHere ? `${base} border-primary bg-muted/30` : `${base} border-border`;
+}
+
+/* -------------------------------------------------------------
+ * หนึ่งรายการบนเส้นเวลา — ใช้ซ้ำทั้งการ์ด ② และกล่อง "บันทึกของจุดนี้"
+ * เขียนที่เดียวจึงไม่มีทางที่สองที่จะแสดงค่าเดียวกันคนละแบบ
+ * ----------------------------------------------------------- */
+function TimelineEvent({ ev }: { ev: TimelineEntry }) {
+  if (ev.type === "treatment") {
+    const t = ev.row;
+    const detail = [t.detail, t.dose, t.route, t.site].filter(Boolean).join(" · ");
+    return (
+      <div className="rounded-lg border border-border border-l-4 border-l-border bg-background px-3 py-2">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="text-sm font-semibold">
+            การรักษา · {TX_LABEL[t.tx_code] ?? t.tx_code}
+          </span>
+          <span className="ml-auto text-xs text-muted-foreground">
+            <RelativeTime value={ev.at} />
+          </span>
+        </div>
+        {detail && <p className="mt-1 text-sm">{detail}</p>}
+        <p className="mt-1 text-xs text-muted-foreground">
+          บันทึกโดย {personName(one(t.giver)) ?? "ไม่ทราบผู้บันทึก"}
+        </p>
+      </div>
+    );
+  }
+
+  const a = ev.row;
+  const vitals = vitalsLine(a);
+  return (
+    <div className="rounded-lg border border-border bg-background px-3 py-2">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        {/* สีที่ยืนยันไว้ในการประเมินครั้งนี้ — ตอบว่า "ตอนนั้นเป็นสีอะไร"
+            ไม่ใช่แค่สีล่าสุดของเคส จึงเห็นได้ว่าสีเปลี่ยนตอนไหนที่จุดไหน */}
+        {a.triage ? (
+          <TriageChip value={a.triage as TriageColor} />
+        ) : (
+          <span className="text-sm font-semibold">ผลประเมิน</span>
+        )}
+        <span className="ml-auto text-xs text-muted-foreground">
+          <RelativeTime value={a.assessed_at} />
+        </span>
+      </div>
+      {vitals && <p className="mt-1.5 font-mono text-sm">{vitals}</p>}
+      {a.avpu && (
+        <p className="mt-1 text-sm">
+          ระดับความรู้สึกตัว {AVPU_LABEL[a.avpu as AvpuLevel]}
+        </p>
+      )}
+      {a.findings && <p className="mt-1 text-sm">{a.findings}</p>}
+      {a.treatment && (
+        <p className="mt-1 text-sm">
+          <span className="font-semibold">การรักษา · </span>
+          {a.treatment}
+        </p>
+      )}
+      <p className="mt-1 text-xs text-muted-foreground">
+        บันทึกโดย {personName(one(a.assessor)) ?? "ไม่ทราบผู้บันทึก"}
+      </p>
+    </div>
+  );
 }
 
 export default async function Page({
@@ -134,7 +269,7 @@ export default async function Page({
       `id, case_code, precedence, triage, chief_complaint, patient_alias,
        patient_count, requested_at, closed_at, status, mechanism,
        pickup_marking, pickup_grid, patient_mobility, transport_mode,
-       origin_unit_id, outcome, disposition_route, icd10, feedback_note,
+       origin_unit_id, outcome, disposition_route, diagnosis, icd10, feedback_note,
        origin:origin_unit_id (name_th),
        dest:dest_unit_id (name_th),
        transfer_leg (
@@ -225,7 +360,6 @@ export default async function Page({
     .order("given_at", { ascending: true });
 
   const treatments = rawTreatments ?? [];
-  const legNoById = new Map(rawLegs.map((l) => [l.id, l.leg_no]));
 
   /**
    * เส้นเวลาเดียวของทั้งเคส — ผลประเมินกับการรักษาปนกันเรียงตามเวลาจริง
@@ -241,7 +375,6 @@ export default async function Page({
       at: a.assessed_at,
       at2: a.assessed_at,
       row: a,
-      legNo: a.leg_id ? legNoById.get(a.leg_id) : undefined,
     })),
     ...treatments.map((t) => ({
       type: "treatment" as const,
@@ -249,7 +382,6 @@ export default async function Page({
       /** ตัวตัดสินเสมอชั้นที่สอง — ต้องมีเพื่อให้ลำดับตรงกับ getTourniquets() */
       at2: t.created_at,
       row: t,
-      legNo: t.leg_id ? legNoById.get(t.leg_id) : undefined,
     })),
   ]
     /**
@@ -274,6 +406,56 @@ export default async function Page({
         a.at2.localeCompare(b.at2) ||
         a.row.id.localeCompare(b.row.id),
     );
+
+  /**
+   * จัดผลประเมินและการรักษาเป็น "จุด" ตามสายส่งกลับ (src/lib/care-timeline.ts)
+   *
+   * ★ ต้องทำหลังเรียง timeline เสร็จเสมอ ห้ามสลับลำดับสองขั้นนี้
+   *   groupByStation รักษาลำดับที่ส่งเข้าไปไว้ทั้งหมด ไม่เรียงใหม่ให้
+   *   ถ้าจัดกลุ่มก่อนเรียง ลำดับสายรัดจะกลับไปสลับกับการ์ด ⑤ อีก
+   */
+  const careLegs = rawLegs.map((l) => ({
+    legNo: l.leg_no,
+    fromUnit: one(l.from_unit)?.name_th ?? "—",
+    toUnit: one(l.to_unit)?.name_th ?? "—",
+    vehicle: one(l.vehicle)?.call_sign ?? null,
+    onSceneAt: l.on_scene_at,
+    handoverAt: l.handover_at,
+  }));
+
+  const stationGroups = groupByStation(careLegs, timeline);
+
+  /**
+   * จุดที่ผู้ป่วยอยู่ "ตอนนี้" — ต้องคิดจากทอด ไม่ใช่จากกลุ่มที่มีบันทึก
+   *
+   * ⚠ เคยเขียนผิดเป็น stationGroups.at(-1) ซึ่งหมายถึง "จุดสุดท้ายที่มีคนลงบันทึก"
+   *   คนละเรื่องกับ "จุดที่ผู้ป่วยอยู่" — เคสที่รถจอดหน้าโรงพยาบาลแล้วแต่ยังไม่มี
+   *   ใครบันทึกอะไรระหว่างทาง จะเหลือกลุ่มเดียวคือของเขตหน้า แล้วเขตหน้าจะโดน
+   *   ติดป้าย "จุดนี้" ทั้งที่ผู้ป่วยออกจากที่นั่นไปนานแล้ว (เจอตอนดูภาพจริง)
+   *
+   *   stationsOf() สร้างจุดตามเวลาที่เกิดขึ้นจริงและไม่กรองอะไรทิ้ง
+   *   จุดสุดท้ายของมันจึงเป็นที่อยู่ปัจจุบันของผู้ป่วยเสมอ
+   */
+  const allStations = stationsOf(careLegs);
+  const hereStation = allStations.at(-1) ?? null;
+  const hereKey = hereStation?.key ?? null;
+
+  /**
+   * รายการที่วาดจริง — ต่อจุดปัจจุบันเข้าไปด้วยแม้ยังไม่มีใครบันทึกอะไร
+   *
+   * groupByStation คืนเฉพาะจุดที่มีบันทึก ซึ่งถูกแล้วสำหรับจุดที่ผ่านไปแล้ว
+   * (จุดที่ผู้ป่วยแวะแล้วไม่ได้ทำอะไรไม่ต้องกินที่บนจอ) แต่กับจุด "ปัจจุบัน"
+   * การหายไปทำให้อ่านไม่ออกว่าตอนนี้ผู้ป่วยอยู่ไหน และป้าย "จุดนี้" จะโผล่บ้าง
+   * ไม่โผล่บ้างแล้วแต่ว่ามีคนบันทึกหรือยัง ซึ่งดูเหมือนระบบเพี้ยน
+   */
+  const displayGroups =
+    hereStation && !stationGroups.some((g) => g.station.key === hereKey)
+      ? [...stationGroups, { station: hereStation, events: [] }]
+      : stationGroups;
+
+  /** กล่อง "บันทึกของจุดนี้" — ยังไม่มีบันทึกก็ไม่ต้องวาดกล่องเปล่าใต้ฟอร์ม */
+  const hereGroup =
+    stationGroups.find((g) => g.station.key === hereKey) ?? null;
 
   /**
    * ตัวเลือกสำหรับปุ่มจัดรถ ดึงเฉพาะตอนที่มีทอดรอจัดรถอยู่จริง
@@ -496,95 +678,25 @@ export default async function Page({
           <section className="rounded-xl border border-border bg-card p-4">
             <h2 className="text-lg font-semibold">ผลประเมินตลอดสายส่งกลับ</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              เรียงตามเวลาที่บันทึกจริง — อ่านจากบนลงล่างจะเห็นว่าอาการเดินไปทางไหน
+              แยกตามจุดที่ดูแล เรียงจากต้นทางไปปลายทาง —
+              อ่านจากบนลงล่างจะเห็นว่าแต่ละจุดทำอะไรไปบ้าง
             </p>
-            {timeline.length === 0 ? (
+            {displayGroups.length === 0 ? (
               <p className="mt-2 text-sm text-muted-foreground">
                 ยังไม่มีการบันทึกผลประเมินในเคสนี้
               </p>
             ) : (
               <ol className="mt-3 space-y-3">
-                {timeline.map((ev) =>
-                  ev.type === "treatment" ? (
-                    <li
-                      key={`t-${ev.row.id}`}
-                      className="rounded-lg border border-border border-l-4 border-l-border px-3 py-2.5"
-                    >
-                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                        <span className="text-sm font-semibold">
-                          การรักษา · {TX_LABEL[ev.row.tx_code] ?? ev.row.tx_code}
-                        </span>
-                        {ev.legNo !== undefined && (
-                          <span className="font-mono text-xs text-muted-foreground">
-                            ทอด {ev.legNo}
-                          </span>
-                        )}
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          <RelativeTime value={ev.at} />
-                        </span>
-                      </div>
-                      {(ev.row.detail || ev.row.dose || ev.row.route || ev.row.site) && (
-                        <p className="mt-1 text-sm">
-                          {[ev.row.detail, ev.row.dose, ev.row.route, ev.row.site]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </p>
-                      )}
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        บันทึกโดย {personName(one(ev.row.giver)) ?? "ไม่ทราบผู้บันทึก"}
-                      </p>
-                    </li>
-                  ) : (
-                    ((a) => {
-                      const vitals = vitalsLine(a);
-                      const legNo = a.leg_id ? legNoById.get(a.leg_id) : undefined;
-                      return (
-                    <li
-                      key={a.id}
-                      className="rounded-lg border border-border px-3 py-2.5"
-                    >
-                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                        <span className="text-sm font-semibold">
-                          {ASSESSMENT_KIND_LABEL[a.kind] ?? a.kind}
-                        </span>
-                        {/* สีที่ยืนยันไว้ในการประเมินครั้งนี้ — ตอบว่า "ตอนนั้นเป็นสีอะไร"
-                            ไม่ใช่แค่สีล่าสุดของเคส จึงเห็นได้ว่าสีเปลี่ยนตอนไหนและใครเปลี่ยน */}
-                        {a.triage && <TriageChip value={a.triage as TriageColor} />}
-                        {legNo !== undefined && (
-                          <span className="font-mono text-xs text-muted-foreground">
-                            ทอด {legNo}
-                          </span>
-                        )}
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          <RelativeTime value={a.assessed_at} />
-                        </span>
-                      </div>
-
-                      {vitals && (
-                        <p className="mt-1.5 font-mono text-sm">{vitals}</p>
-                      )}
-                      {a.avpu && (
-                        <p className="mt-1 text-sm">
-                          ระดับความรู้สึกตัว {AVPU_LABEL[a.avpu as AvpuLevel]}
-                        </p>
-                      )}
-                      {a.findings && (
-                        <p className="mt-1 text-sm">{a.findings}</p>
-                      )}
-                      {a.treatment && (
-                        <p className="mt-1 text-sm">
-                          <span className="font-semibold">การรักษา · </span>
-                          {a.treatment}
-                        </p>
-                      )}
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        บันทึกโดย {personName(one(a.assessor)) ?? "ไม่ทราบผู้บันทึก"}
-                      </p>
-                    </li>
-                      );
-                    })(ev.row)
-                  ),
-                )}
+                {displayGroups.map((g) => (
+                  <li key={g.station.key}>
+                    <StationCard
+                      station={g.station}
+                      events={g.events}
+                      /* จุดสุดท้ายคือที่ผู้ป่วยอยู่ตอนนี้ ติดป้ายให้หาเจอในหนึ่งวินาที */
+                      isHere={g.station.key === hereKey}
+                    />
+                  </li>
+                ))}
               </ol>
             )}
           </section>
@@ -658,11 +770,40 @@ export default async function Page({
           {/* ⑥ บันทึกการรักษา — ใต้รายการสายรัดตามลำดับที่มือทำจริง */}
           <TreatmentsPanel caseId={caseId} custody={custody} />
 
+          {/*
+            กล่อง "บันทึกของจุดนี้" — กันการเลื่อนหน้าจอกลับขึ้นไปที่การ์ด ②
+            (เจ้าของโครงการเจอตอนทดสอบด้วยมือ 9 ก.ย. 2569)
+
+            ★ ใช้ผลจาก groupByStation ตัวเดียวกับการ์ด ② เอาจุดสุดท้ายมาแสดง
+              จึงไม่มีทางแสดงคนละอย่างกับข้างบน และไม่มีตรรกะชุดที่สองให้ดูแล
+
+            ★ กล่องนี้ซ้ำกับจุดสุดท้ายของการ์ด ② โดยเจตนา ไม่ใช่ความพลาด
+              การ์ด ② ตอบว่า "ก่อนหน้านี้เกิดอะไรมาบ้าง" อ่านตอนเปิดเคส
+              กล่องนี้ตอบว่า "ที่เพิ่งกรอกไปเข้าจริงไหม" อ่านตอนกำลังกรอก
+              คนละคำถามคนละจังหวะ จึงต้องอยู่คนละที่บนหน้าจอ
+          */}
+          {hereGroup && (
+            <section className="rounded-xl border border-border bg-card p-4">
+              <h2 className="text-lg font-semibold">บันทึกของจุดนี้</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {hereGroup.station.label} · {hereGroup.events.length} รายการ
+              </p>
+              <ol className="mt-3 space-y-2">
+                {hereGroup.events.map((ev) => (
+                  <li key={`here-${ev.type}-${ev.row.id}`}>
+                    <TimelineEvent ev={ev} />
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+
           {/* ⑦ ส่งผู้ป่วยออก — จำหน่ายไปแล้วก็แสดงผลแทน ไม่ยื่นฟอร์มให้กดซ้ำ */}
           {outcome ? (
             <DispositionSummary
               outcome={outcome}
               destUnitName={one(row.dest)?.name_th ?? null}
+              diagnosis={row.diagnosis}
               icd10={row.icd10}
               feedbackNote={row.feedback_note}
             />

@@ -126,6 +126,7 @@ export type Database = {
           created_at: string
           created_by: string
           dest_unit_id: string | null
+          diagnosis: string | null
           disposed_at: string | null
           disposition_route:
             | Database["public"]["Enums"]["disposition_route"]
@@ -180,6 +181,7 @@ export type Database = {
           created_at?: string
           created_by: string
           dest_unit_id?: string | null
+          diagnosis?: string | null
           disposed_at?: string | null
           disposition_route?:
             | Database["public"]["Enums"]["disposition_route"]
@@ -238,6 +240,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           dest_unit_id?: string | null
+          diagnosis?: string | null
           disposed_at?: string | null
           disposition_route?:
             | Database["public"]["Enums"]["disposition_route"]

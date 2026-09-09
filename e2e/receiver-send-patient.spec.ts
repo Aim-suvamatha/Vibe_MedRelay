@@ -97,15 +97,26 @@ test.describe("ผู้รับส่งผู้ป่วยออกจา�
 
     await page.getByText("ส่งต่อชั้นการรักษาที่สูงกว่า").click();
 
-    const toUnit = page.locator('select[name="toUnitId"]');
+    /**
+     * ★ ต้องล็อกขอบเขตไว้ที่ฟอร์มของทางนี้เสมอ ห้ามค้นทั้งหน้า
+     *   ตั้งแต่ 9 ก.ย. 2569 ช่อง diagnosis กับ icd10 มีอยู่ทั้งสองทาง
+     *   selector ที่ค้นทั้งหน้าจะเจอสองตัวแล้วไปหยิบตัวที่อยู่ใน <details>
+     *   ที่ยังพับอยู่ ซึ่งมองไม่เห็น แล้ว fill ค้างจนหมดเวลา
+     */
+    const formA = page.locator("form").filter({ hasText: "ส่งคำขอส่งต่อ" });
+
+    const toUnit = formA.locator('select[name="toUnitId"]');
     await expect(toUnit).toBeVisible();
     await toUnit.selectOption({ index: 1 });
-    await page.locator('input[name="precedence"][value="priority"]').check({ force: true });
-    await page.locator('select[name="transportMode"]').selectOption("ground");
-    await page.fill(
-      'textarea[name="reason"]',
-      "ต้องผ่าตัดยึดตรึงกระดูก เกินขีดความสามารถของหน่วย",
-    );
+    await formA
+      .locator('input[name="precedence"][value="priority"]')
+      .check({ force: true });
+    await formA.locator('select[name="transportMode"]').selectOption("ground");
+    await formA.locator('textarea[name="diagnosis"]').fill("กระดูกต้นขาขวาหักปิด");
+    await formA.locator('input[name="icd10"]').fill("S72.3");
+    await formA
+      .locator('textarea[name="reason"]')
+      .fill("ต้องผ่าตัดยึดตรึงกระดูก เกินขีดความสามารถของหน่วย");
 
     await page.getByRole("button", { name: "ส่งคำขอส่งต่อ" }).click();
 
@@ -129,9 +140,17 @@ test.describe("ผู้รับส่งผู้ป่วยออกจา�
 
     await page.getByText("ส่งคืนหน่วยต้นสังกัด").click();
 
-    await page.locator('input[name="outcome"][value="recovered"]').check({ force: true });
-    await page.fill('input[name="icd10"]', "S81.0");
-    await page.fill('textarea[name="feedbackNote"]', "พักงานเบา 7 วัน นัดตัดไหม 10 วัน");
+    // เหตุผลเดียวกับทาง ก — ช่องวินิจฉัยมีทั้งสองทาง ต้องล็อกขอบเขตไว้ที่ฟอร์มนี้
+    const formB = page.locator("form").filter({ hasText: "บันทึกการส่งคืน" });
+
+    await formB
+      .locator('input[name="outcome"][value="recovered"]')
+      .check({ force: true });
+    await formB.locator('textarea[name="diagnosis"]').fill("แผลถลอกหลายแห่ง");
+    await formB.locator('input[name="icd10"]').fill("S81.0");
+    await formB
+      .locator('textarea[name="feedbackNote"]')
+      .fill("พักงานเบา 7 วัน นัดตัดไหม 10 วัน");
 
     await page.getByRole("button", { name: "บันทึกการส่งคืน" }).click();
 
@@ -139,6 +158,7 @@ test.describe("ผู้รับส่งผู้ป่วยออกจา�
     await expect(page.getByText("จำหน่ายผู้ป่วยแล้ว")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(/หาย · กลับปฏิบัติหน้าที่ได้/)).toBeVisible();
     await expect(page.getByText("S81.0")).toBeVisible();
+    await expect(page.getByText("แผลถลอกหลายแห่ง").first()).toBeVisible();
     await expect(page.getByText(/พักงานเบา 7 วัน/)).toBeVisible();
 
     // ★ ต้องไม่เปิดทอดใหม่ และเคสต้องยังปิดอยู่

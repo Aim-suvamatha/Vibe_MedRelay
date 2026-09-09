@@ -11,10 +11,17 @@ import { hasCredentials, login } from "./helpers/auth";
  * ★ ข้ามเองเมื่อไม่มี SETUP_DEMO ด้วยเหตุผลเดียวกับ setup-demo-transport.spec.ts
  *   ไฟล์นี้ "สร้างข้อมูล" ถ้าปล่อยรันปนทุกครั้งจะมีเคสงอกและแย่งรถกับสเปคอื่น
  *
- * สร้างสามใบให้เจ้าของโครงการเปิดหน้า /receiver แล้วเห็นครบทั้งสามระยะของการส่งกลับ
+ * สร้างห้าใบให้เจ้าของโครงการเปิดหน้า /receiver แล้วเห็นครบทุกระยะของการส่งกลับ
  *   ใบที่ 1  จัดรถแล้ว          → ปลายทางเพิ่งรู้ว่าจะมีคนมา รถยังไม่ถึงจุดรับ
  *   ใบที่ 2  กำลังเดินทาง        → อยู่บนรถแล้ว มีผลประเมินซ้ำระหว่างทาง (สีเปลี่ยนเป็นแดง)
  *   ใบที่ 3  ถึงปลายทาง + ชุดลำเลียงกดส่งมอบแล้ว → ค้างรอผู้รับกด "รับผู้ป่วยเข้ารักษา"
+ *   ใบที่ 4  รับผู้ป่วยแล้ว       → ไว้ลองการ์ด ⑦ "ส่งต่อชั้นการรักษาที่สูงกว่า"
+ *   ใบที่ 5  รับผู้ป่วยแล้ว       → ไว้ลองการ์ด ⑦ "ส่งคืนหน่วยต้นสังกัด"
+ *
+ * ★ ทำไมใบ 4 กับ 5 ต้องแยกกัน
+ *   ทางออกทั้งสองของผู้รับเป็นทางเดียว กดแล้วกดซ้ำไม่ได้ — ส่งคืนหน่วยจะบันทึก
+ *   ผลจำหน่ายแล้วการ์ด ⑦ กลายเป็นสรุป ส่วนส่งต่อจะเปิดทอดที่ 2 แล้วเคสกลับมาเดิน
+ *   ถ้ามีใบเดียวจะลองได้ทางเดียวแล้วต้องรันสคริปต์ใหม่ทั้งชุด
  *
  * ★ ปลายทางต้องเป็นโรงพยาบาลค่ายสมมติ (หน่วยของ 9900000003) เท่านั้น
  *   /receiver กรองด้วย to_unit_id = หน่วยของคนที่ล็อกอิน และ can_see_case()
@@ -127,12 +134,38 @@ async function advance(page: Page, click: string, expectNext: string) {
   });
 }
 
+/**
+ * เดินทอดจนถึงปลายทางแล้วให้ผู้รับกดรับผู้ป่วย — ใช้กับใบที่ 4 และ 5
+ *
+ * ★ ต้องสลับบัญชีจริงตรงขั้นสุดท้าย ปลอมไม่ได้
+ *   0023 บังคับว่าปุ่ม "รับผู้ป่วยเข้ารักษา" กดได้เฉพาะคนที่สังกัดหน่วยปลายทาง
+ *   และ custody.ts ผูกสิทธิ์บันทึกทางคลินิกไว้กับ handover_at ที่ปุ่มนี้ตั้งให้
+ */
+async function receiveAtDestination(page: Page, caseId: string) {
+  await page.goto(`/track/${caseId}`);
+  await advance(page, "ถึงจุดรับแล้ว", "ออกเดินทางจากจุดรับ");
+  await advance(page, "ออกเดินทางจากจุดรับ", "ถึงปลายทางส่งกลับแล้ว");
+  await advance(page, "ถึงปลายทางส่งกลับแล้ว", "ส่งมอบผู้ป่วย");
+  await page.getByRole("button", { name: "ส่งมอบผู้ป่วย" }).click();
+  await expect(page.getByText("ชุดลำเลียงส่งมอบแล้ว")).toBeVisible({ timeout: 30_000 });
+
+  await login(page, `/track/${caseId}`, RECEIVER);
+  await page.goto(`/track/${caseId}`);
+  await page.getByRole("button", { name: "รับผู้ป่วยเข้ารักษา" }).click();
+  await expect(page.getByText("ส่งผู้ป่วยออกจากหน่วยนี้")).toBeVisible({
+    timeout: 30_000,
+  });
+
+  // กลับมาเป็นเขตหน้า/ชุดลำเลียงเพื่อเปิดใบถัดไป
+  await login(page, "/sender/new", SENDER);
+}
+
 test.describe("ตั้งเคสให้พร้อมลองหน้า Receiver", () => {
   test.skip(!hasCredentials, "ยังไม่ได้ตั้ง E2E_* ใน .env.local");
   test.skip(!process.env.SETUP_DEMO, "สคริปต์สร้างข้อมูล — สั่งด้วย SETUP_DEMO=1 เท่านั้น");
   test.setTimeout(300_000);
 
-  test("สร้าง 3 ใบ — จัดรถแล้ว · กำลังเดินทาง · รอรับผู้ป่วย", async ({ page }) => {
+  test("สร้าง 5 ใบ — ครบทุกระยะ รวมใบที่รับแล้วไว้ลองส่งผู้ป่วยออก", async ({ page }) => {
     await login(page, "/sender/new", SENDER);
 
     /* ── ใบที่ 1 · จัดรถแล้ว — ปลายทางเพิ่งรู้ว่าจะมีคนมา ─────────── */
@@ -199,6 +232,26 @@ test.describe("ตั้งเคสให้พร้อมลองหน้�
     await page.getByRole("button", { name: "ส่งมอบผู้ป่วย" }).click();
     await expect(page.getByText("ชุดลำเลียงส่งมอบแล้ว")).toBeVisible({ timeout: 30_000 });
 
+    /* ── ใบที่ 4 · รับผู้ป่วยแล้ว — ไว้ลอง "ส่งต่อชั้นการรักษาที่สูงกว่า" ── */
+    const caseD = await createCase(page, {
+      complaint: "กระดูกต้นขาหักปิด ต้องผ่าตัดยึดตรึง (ใบนี้ไว้ลองส่งต่อชั้นสูงกว่า)",
+      lastName: "สี่",
+      precedence: "priority",
+      vitals: { sbp: "112", dbp: "70", pulse: "104", rr: "20" },
+    });
+    await dispatchToSelf(page, caseD);
+    await receiveAtDestination(page, caseD);
+
+    /* ── ใบที่ 5 · รับผู้ป่วยแล้ว — ไว้ลอง "ส่งคืนหน่วยต้นสังกัด" ────── */
+    const caseE = await createCase(page, {
+      complaint: "แผลถลอกหลายแห่ง ทำแผลแล้วอาการดี (ใบนี้ไว้ลองส่งคืนหน่วย)",
+      lastName: "ห้า",
+      precedence: "routine",
+      vitals: { sbp: "120", dbp: "76", pulse: "82", rr: "16" },
+    });
+    await dispatchToSelf(page, caseE);
+    await receiveAtDestination(page, caseE);
+
     /* ── ถ่ายภาพหน้าจอฝั่งผู้รับให้ดูได้เลย ───────────────────── */
     await login(page, "/receiver", RECEIVER);
     await page.goto("/receiver");
@@ -228,6 +281,12 @@ test.describe("ตั้งเคสให้พร้อมลองหน้�
 ║     http://localhost:3000/track/${caseB}
 ║  ใบที่ 3 (ถึงปลายทางแล้ว · รอกดปุ่ม "รับผู้ป่วยเข้ารักษา")
 ║     http://localhost:3000/track/${caseC}
+║
+║  ── รับผู้ป่วยแล้ว · ไว้ลองการ์ด "ส่งผู้ป่วยออกจากหน่วยนี้" ──
+║  ใบที่ 4 (ลองทาง "ส่งต่อชั้นการรักษาที่สูงกว่า")
+║     http://localhost:3000/track/${caseD}
+║  ใบที่ 5 (ลองทาง "ส่งคืนหน่วยต้นสังกัด")
+║     http://localhost:3000/track/${caseE}
 ╚═══════════════════════════════════════════════════════════════
 `);
   });

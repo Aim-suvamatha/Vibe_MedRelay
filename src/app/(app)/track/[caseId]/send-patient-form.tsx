@@ -99,6 +99,53 @@ function Summary({ children }: { children: React.ReactNode }) {
 }
 
 /* -------------------------------------------------------------
+ * ช่องวินิจฉัย — ใช้ซ้ำทั้งสองทางของการส่งผู้ป่วยออก
+ *
+ * ★ ทำไมต้องมีสองช่อง ไม่ใช่ ICD-10 ช่องเดียว (เจ้าของโครงการ 9 ก.ย. 2569)
+ *   คนที่กรอกหน้างานจำรหัส ICD-10 ไม่ได้ ถ้ามีแต่ช่องรหัสเขาจะเว้นว่างทิ้ง
+ *   แล้วข้อมูลวินิจฉัยหายไปทั้งก้อน ทั้งที่เขา "รู้" ว่าผู้ป่วยเป็นอะไร
+ *   ช่องข้อความจึงเป็นช่องหลัก ส่วนรหัสเป็นของแถมสำหรับคนที่กรอกได้
+ *
+ * ★ ทั้งสองช่องไม่บังคับ — บังคับแล้วคนจะกรอกมั่วเพื่อให้ผ่าน
+ *   ซึ่งแย่กว่าเว้นว่าง เพราะเวชระเบียนที่ผิดอ่านไม่ออกว่าผิด
+ * ----------------------------------------------------------- */
+function DiagnosisFields({ id }: { id: string }) {
+  return (
+    <>
+      <div className="space-y-2">
+        <label htmlFor={`${id}-dx`} className="block text-sm font-semibold">
+          วินิจฉัย (Diagnosis)
+        </label>
+        <textarea
+          id={`${id}-dx`}
+          name="diagnosis"
+          rows={2}
+          maxLength={500}
+          placeholder="เช่น กระดูกต้นขาขวาหักปิด"
+          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-base focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor={`${id}-icd`} className="block text-sm font-semibold">
+          ICD-10 <span className="font-normal text-muted-foreground">(ถ้ามี)</span>
+        </label>
+        <input
+          id={`${id}-icd`}
+          name="icd10"
+          maxLength={10}
+          placeholder="เช่น S72.3"
+          className={cn(FIELD, "font-mono uppercase")}
+        />
+        <p className="text-xs text-muted-foreground">
+          จำรหัสไม่ได้ไม่เป็นไร กรอกคำวินิจฉัยด้านบนอย่างเดียวก็พอ
+        </p>
+      </div>
+    </>
+  );
+}
+
+/* -------------------------------------------------------------
  * ทาง ก · ส่งต่อชั้นการรักษาที่สูงกว่า
  * ----------------------------------------------------------- */
 function EvacOnwardForm({
@@ -176,6 +223,8 @@ function EvacOnwardForm({
         </select>
       </div>
 
+      <DiagnosisFields id={id} />
+
       <div className="space-y-2">
         <label htmlFor={`${id}-reason`} className="block text-sm font-semibold">
           เหตุผลที่ส่งต่อ
@@ -240,18 +289,7 @@ function ReturnToUnitForm({
         ))}
       </fieldset>
 
-      <div className="space-y-2">
-        <label htmlFor={`${id}-icd`} className="block text-sm font-semibold">
-          รหัส ICD-10 <span className="font-normal text-muted-foreground">(ถ้ามี)</span>
-        </label>
-        <input
-          id={`${id}-icd`}
-          name="icd10"
-          maxLength={10}
-          placeholder="เช่น S81.0"
-          className={cn(FIELD, "font-mono uppercase")}
-        />
-      </div>
+      <DiagnosisFields id={id} />
 
       <div className="space-y-2">
         <label htmlFor={`${id}-fb`} className="block text-sm font-semibold">
@@ -331,11 +369,13 @@ export function SendPatientForm({
 export function DispositionSummary({
   outcome,
   destUnitName,
+  diagnosis,
   icd10,
   feedbackNote,
 }: {
   outcome: CaseOutcome;
   destUnitName: string | null;
+  diagnosis: string | null;
   icd10: string | null;
   feedbackNote: string | null;
 }) {
@@ -357,6 +397,12 @@ export function DispositionSummary({
           <div>
             <dt className="font-semibold text-muted-foreground">ICD-10</dt>
             <dd className="mt-0.5 font-mono">{icd10}</dd>
+          </div>
+        )}
+        {diagnosis && (
+          <div className="sm:col-span-2">
+            <dt className="font-semibold text-muted-foreground">วินิจฉัย</dt>
+            <dd className="mt-0.5">{diagnosis}</dd>
           </div>
         )}
       </dl>

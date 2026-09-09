@@ -7,8 +7,16 @@ import { getProfile, hasAnyRole } from "@/lib/auth/profile";
 import { custodyOf } from "@/lib/custody";
 import { ASSESSOR_ROLES, isLegOpen } from "@/lib/leg-flow";
 import { createClient } from "@/lib/supabase/server";
+import { TRIAGE } from "@/lib/triage";
+import { vitalsLine } from "@/lib/vitals";
 import type { AssessmentKind, TriageColor } from "@/lib/enums";
-import { TreatmentRow, VITALS_SHAPE, bpOrderRefine, jsonArray } from "../../sender/schema";
+import {
+  TX_LABEL,
+  TreatmentRow,
+  VITALS_SHAPE,
+  bpOrderRefine,
+  jsonArray,
+} from "../../sender/schema";
 
 /**
  * ประเมินซ้ำระหว่างสายส่งกลับ (คำสั่งเจ้าของโครงการ 8 ก.ย. 2569)
@@ -163,7 +171,15 @@ export async function saveTriage(
   }
 
   revalidatePath(`/track/${caseId}`);
-  return { ok: "บันทึกระดับความรุนแรงแล้ว" };
+  /**
+   * ★ ต่อค่าที่เพิ่งบันทึกไว้ท้ายข้อความ (คำสั่งเจ้าของโครงการ 9 ก.ย. 2569)
+   *   เดิมผลไปโผล่ที่การ์ดผลประเมินซึ่งอยู่เหนือฟอร์มขึ้นไป กรอกทีต้องเลื่อน
+   *   ขึ้นไปยืนยันทีว่าเข้าจริงไหม แล้วเลื่อนกลับลงมากรอกต่อ
+   *
+   * ⚠ ห้ามเปลี่ยนคำนำหน้า — e2e ค้นด้วย getByText("บันทึกระดับความรุนแรงแล้ว")
+   *   ซึ่งเป็นการค้นแบบ substring จึงยังผ่านตราบใดที่คำหน้าไม่ขยับ
+   */
+  return { ok: `บันทึกระดับความรุนแรงแล้ว · ${TRIAGE[parsed.data.triage as TriageColor].label}` };
 }
 
 /* =============================================================
@@ -220,7 +236,17 @@ export async function saveVitals(
   }
 
   revalidatePath(`/track/${caseId}`);
-  return { ok: "บันทึกสัญญาณชีพแล้ว" };
+  // ใช้ vitalsLine ตัวเดียวกับที่หน้าจอใช้ ค่าเดียวกันจะได้อ่านเหมือนกันทุกที่
+  const line = vitalsLine({
+    sbp: v.sbp,
+    dbp: v.dbp,
+    pulse: v.pulse,
+    resp_rate: v.respRate,
+    spo2: v.spo2,
+    temperature: v.temperature,
+    gcs: v.gcs,
+  });
+  return { ok: line ? `บันทึกสัญญาณชีพแล้ว · ${line}` : "บันทึกสัญญาณชีพแล้ว" };
 }
 
 /* =============================================================
@@ -278,5 +304,6 @@ export async function saveTreatments(
   }
 
   revalidatePath(`/track/${caseId}`);
-  return { ok: `บันทึกการรักษา ${rows.length} รายการแล้ว` };
+  const names = rows.map((r) => TX_LABEL[r.txCode] ?? r.txCode).join(" · ");
+  return { ok: `บันทึกการรักษา ${rows.length} รายการแล้ว · ${names}` };
 }
