@@ -32,6 +32,11 @@
 | 19 | `migrations/0019_casualty.sql` | ตาราง `casualty` ประวัติผู้ป่วยตาม ทบ.466-901 พร้อม RLS |
 | 20 | `migrations/0020_case_form_fields_v2.sql` | คอลัมน์ที่เหลือใน `case` + constraint เวลาของ `treatment` |
 | 21 | `migrations/0021_create_evac_request_v2.sql` | `create_evac_request` ตัวใหม่ + `release_tourniquet` |
+| 22 | `migrations/0022_reassessment_and_handover.sql` | ประเมินซ้ำระหว่างทาง + ส่งมอบสองฝ่าย (`handover_ready_*`) + trigger `sync_case_triage` |
+| 23 | `migrations/0023_fix_leg_update_scope.sql` | รัดขอบเขต `leg_update` ที่ `0022` เปิดกว้างเกินไป — ใช้ได้เฉพาะ `pending → dispatched` |
+| 24 | `migrations/0024_case_diagnosis.sql` | คอลัมน์ `diagnosis` ของแพทย์ปลายทาง |
+| 25 | `migrations/0025_monitor_resources.sql` | อนุมัติส่งกลับทางอากาศ (`air_decision`) + กำลังพลประจำรถ/ประจำหน่วยเป็นตัวเลข · **เขียนทับ `set_case_form_timestamps()` ของ `0013`** |
+| 26 | `migrations/0026_evac_node_flag.sql` | `unit.is_evac_node` แยกจุดส่งกลับออกจากหน่วยอำนวยการ |
 
 จากนั้นใส่ข้อมูลจำลอง
 

@@ -3,12 +3,12 @@ import Link from "next/link";
 import { AppHeader, AppShell } from "@/components/medrelay/app-shell";
 import { NoAccessNotice } from "@/components/medrelay/no-access";
 import { PrecedenceBadge } from "@/components/medrelay/precedence-badge";
+import { StatCard } from "@/components/medrelay/stat-card";
 import { TriageDot } from "@/components/medrelay/triage-dot";
 import { getProfile, hasAnyRole } from "@/lib/auth/profile";
 import type { PrecedenceLevel, TriageColor } from "@/lib/enums";
 import { formatDuration, getMetrics } from "@/lib/metrics";
 import { PRECEDENCE_ORDER, TRIAGE_ORDER } from "@/lib/triage";
-import { cn } from "@/lib/utils";
 
 /**
  * หน้า /dashboard — F4 ตัวเลขที่วัดผลได้ (Prompt 09)
@@ -28,39 +28,6 @@ import { cn } from "@/lib/utils";
  *   การกระจายแสดงเป็นรายการนับพร้อมป้ายสีเดิมของระบบ ซึ่งอ่านบนมือถือง่ายกว่า
  *   และไม่ต้องเพิ่ม dependency กราฟเข้ามาในสัปดาห์สุดท้ายก่อนส่ง
  */
-
-function StatCard({
-  label,
-  value,
-  hint,
-  empty,
-}: {
-  label: string;
-  value: string;
-  /** คำอธิบายว่าเลขนี้มาจากไหน หรือทำไมยังไม่มีเลข */
-  hint: string;
-  empty?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-xl border bg-card p-4",
-        empty ? "border-dashed border-border" : "border-border",
-      )}
-    >
-      <p className="text-sm font-semibold text-muted-foreground">{label}</p>
-      <p
-        className={cn(
-          "mt-1 text-3xl font-bold tabular-nums",
-          empty && "text-muted-foreground",
-        )}
-      >
-        {value}
-      </p>
-      <p className="mt-1.5 text-sm text-muted-foreground text-balance">{hint}</p>
-    </div>
-  );
-}
 
 function DistributionRow({
   swatch,

@@ -115,6 +115,11 @@ export type Database = {
       }
       case: {
         Row: {
+          air_decision: Database["public"]["Enums"]["air_decision"] | null
+          air_decision_at: string | null
+          air_decision_by: string | null
+          air_decision_note: string | null
+          air_mode_granted: Database["public"]["Enums"]["transport_mode"] | null
           airway_status: Database["public"]["Enums"]["airway_status"] | null
           approved_at: string | null
           approved_by: string | null
@@ -170,6 +175,13 @@ export type Database = {
           wound_status: Database["public"]["Enums"]["wound_status"] | null
         }
         Insert: {
+          air_decision?: Database["public"]["Enums"]["air_decision"] | null
+          air_decision_at?: string | null
+          air_decision_by?: string | null
+          air_decision_note?: string | null
+          air_mode_granted?:
+            | Database["public"]["Enums"]["transport_mode"]
+            | null
           airway_status?: Database["public"]["Enums"]["airway_status"] | null
           approved_at?: string | null
           approved_by?: string | null
@@ -229,6 +241,13 @@ export type Database = {
           wound_status?: Database["public"]["Enums"]["wound_status"] | null
         }
         Update: {
+          air_decision?: Database["public"]["Enums"]["air_decision"] | null
+          air_decision_at?: string | null
+          air_decision_by?: string | null
+          air_decision_note?: string | null
+          air_mode_granted?:
+            | Database["public"]["Enums"]["transport_mode"]
+            | null
           airway_status?: Database["public"]["Enums"]["airway_status"] | null
           approved_at?: string | null
           approved_by?: string | null
@@ -288,6 +307,13 @@ export type Database = {
           wound_status?: Database["public"]["Enums"]["wound_status"] | null
         }
         Relationships: [
+          {
+            foreignKeyName: "case_air_decision_by_fkey"
+            columns: ["air_decision_by"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "case_approved_by_fkey"
             columns: ["approved_by"]
@@ -894,6 +920,8 @@ export type Database = {
           grid_ref: string | null
           id: string
           is_active: boolean
+          is_evac_node: boolean
+          medic_on_duty: number | null
           name_en: string | null
           name_th: string
           parent_id: string | null
@@ -906,6 +934,8 @@ export type Database = {
           grid_ref?: string | null
           id?: string
           is_active?: boolean
+          is_evac_node?: boolean
+          medic_on_duty?: number | null
           name_en?: string | null
           name_th: string
           parent_id?: string | null
@@ -918,6 +948,8 @@ export type Database = {
           grid_ref?: string | null
           id?: string
           is_active?: boolean
+          is_evac_node?: boolean
+          medic_on_duty?: number | null
           name_en?: string | null
           name_th?: string
           parent_id?: string | null
@@ -938,7 +970,10 @@ export type Database = {
           call_sign: string
           created_at: string
           crew_note: string | null
+          driver_count: number
           id: string
+          litter_count: number
+          medic_count: number
           status: Database["public"]["Enums"]["vehicle_status"]
           type: Database["public"]["Enums"]["vehicle_type"]
           unit_id: string
@@ -948,7 +983,10 @@ export type Database = {
           call_sign: string
           created_at?: string
           crew_note?: string | null
+          driver_count?: number
           id?: string
+          litter_count?: number
+          medic_count?: number
           status?: Database["public"]["Enums"]["vehicle_status"]
           type?: Database["public"]["Enums"]["vehicle_type"]
           unit_id: string
@@ -958,7 +996,10 @@ export type Database = {
           call_sign?: string
           created_at?: string
           crew_note?: string | null
+          driver_count?: number
           id?: string
+          litter_count?: number
+          medic_count?: number
           status?: Database["public"]["Enums"]["vehicle_status"]
           type?: Database["public"]["Enums"]["vehicle_type"]
           unit_id?: string
@@ -1139,6 +1180,7 @@ export type Database = {
       release_tourniquet: { Args: { p_id: string }; Returns: number }
     }
     Enums: {
+      air_decision: "approved" | "denied"
       airway_status:
         | "normal"
         | "oral_airway"
@@ -1357,6 +1399,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      air_decision: ["approved", "denied"],
       airway_status: [
         "normal",
         "oral_airway",

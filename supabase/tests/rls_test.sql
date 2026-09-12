@@ -204,6 +204,150 @@ from pg_policies
 where schemaname = 'public' and tablename = 'case_code_counter';
 
 
+-- -------------------------------------------------------------
+-- T11-T16 — การอนุมัติส่งกลับทางอากาศ (0025)
+--
+-- ★ ทำไมต้องทดสอบทั้งฝั่งที่ "ทำได้" และฝั่งที่ "ทำไม่ได้"
+--   monitor มีสิทธิ์กว้างมากใน case_update — แก้ได้ทุกคอลัมน์ของทุกเคส
+--   ไม่ผ่าน can_see_case() ด้วยซ้ำ ถ้าทดสอบแต่ฝั่งที่ทำได้ จะไม่มีวันรู้ว่า
+--   คนอื่นแอบตัดสินคำขอแทนศูนย์สั่งการได้หรือเปล่า
+-- -------------------------------------------------------------
+
+-- T11-T12 · ศูนย์สั่งการ (9900000004 ถือ {monitor,commander})
+select set_config(
+  'request.jwt.claims',
+  json_build_object(
+    'sub',  (select id::text from public.profile where service_number = '9900000004'),
+    'role', 'authenticated'
+  )::text, true);
+set local role authenticated;
+
+do $$
+declare
+  c_id  uuid;
+  n     int;
+  t_at  timestamptz;
+  faked boolean := false;
+begin
+  select id into c_id from public."case" where patient_alias = 'ผู้ป่วย ก' limit 1;
+
+  -- ★ ส่ง air_decision_at ปลอมมาด้วยโดยเจตนา — trigger ต้องเขียนทับเสมอ
+  --   หลักการ Prompt 04 ไม่มีช่องกรอกเวลาที่ใดในระบบ ตัวเลขบนแดชบอร์ดจึงเชื่อได้
+  update public."case"
+     set air_decision      = 'approved',
+         air_decision_by   = auth.uid(),
+         air_decision_at   = timestamptz '2000-01-01 00:00:00+07',
+         air_mode_granted  = 'rotary',
+         air_decision_note = 'ลานจอดพร้อม ทัศนวิสัยดี'
+   where id = c_id;
+  get diagnostics n = row_count;
+
+  select air_decision_at into t_at from public."case" where id = c_id;
+  faked := t_at < now() - interval '1 hour';
+
+  insert into public._rls_result values
+    (11, 'T11 ศูนย์สั่งการอนุมัติคำขอทางอากาศได้',
+         case when n = 1 then 'PASS' else 'FAIL' end,
+         'แก้ไป ' || n || ' แถว'),
+    (12, 'T12 ★ air_decision_at ตั้งโดย trigger ไม่ใช่ค่าที่ client ส่งมา',
+         case when not faked then 'PASS' else 'FAIL' end,
+         case when not faked then 'เวลาที่ได้ = ' || t_at
+              else 'client ยัดเวลาปลอมเข้ามาได้ ห้าม deploy' end);
+end $$;
+
+-- T13 · ไม่อนุมัติแล้วไม่บอกเหตุผล = ข้อมูลหายเงียบ ต้องถูกปฏิเสธที่ฐานข้อมูล
+do $$
+declare
+  c_id    uuid;
+  blocked boolean := false;
+begin
+  select id into c_id from public."case" where patient_alias = 'ผู้ป่วย ข' limit 1;
+  begin
+    update public."case"
+       set air_decision      = 'denied',
+           air_decision_by   = auth.uid(),
+           air_decision_note = null
+     where id = c_id;
+  exception when check_violation then blocked := true;
+  end;
+
+  insert into public._rls_result
+  values (13, 'T13 ★ ไม่อนุมัติโดยไม่ระบุเหตุผลไม่ได้',
+              case when blocked then 'PASS' else 'FAIL' end,
+              case when blocked then 'database ปฏิเสธถูกต้อง'
+                   else 'หน่วยที่ถูกปฏิเสธจะไม่มีวันรู้ว่าเพราะอะไร ห้าม deploy' end);
+end $$;
+
+-- T14 · trigger เดิมของ 0013 ต้องไม่หายไปตอน create or replace ใน 0025
+--       ถ้าคัดลอกฟังก์ชันมาไม่ครบ เวลาจำหน่ายจะหยุดทำงานเงียบๆ โดยไม่มี error
+do $$
+declare
+  c_id uuid;
+  d_at timestamptz;
+begin
+  select id into c_id from public."case" where patient_alias = 'ผู้ป่วย ค' limit 1;
+  update public."case" set outcome = 'recovered' where id = c_id;
+  select disposed_at into d_at from public."case" where id = c_id;
+
+  insert into public._rls_result
+  values (14, 'T14 ★ trigger เดิม (disposed_at) ยังทำงานหลัง 0025 เขียนทับฟังก์ชัน',
+              case when d_at is not null and d_at > now() - interval '1 minute'
+                   then 'PASS' else 'FAIL' end,
+              coalesce(d_at::text, 'ไม่ถูกตั้งเลย — 0025 ทำบล็อกเดิมหาย'));
+end $$;
+
+reset role;
+
+-- T15-T16 · ชุดลำเลียง (9900000002) ตัดสินคำขอแทนศูนย์สั่งการไม่ได้
+--           เขาเห็นเคส 'ผู้ป่วย ก' อยู่แล้ว (T1) แต่ไม่ได้เป็นผู้เปิดเคส
+select set_config(
+  'request.jwt.claims',
+  json_build_object(
+    'sub',  (select id::text from public.profile where service_number = '9900000002'),
+    'role', 'authenticated'
+  )::text, true);
+set local role authenticated;
+
+do $$
+declare
+  c_id    uuid;
+  n       int := -1;
+  blocked boolean := false;
+  before  public.air_decision;
+  after   public.air_decision;
+begin
+  select id, air_decision into c_id, before
+    from public."case" where patient_alias = 'ผู้ป่วย ก' limit 1;
+
+  begin
+    update public."case"
+       set air_decision    = 'denied',
+           air_decision_by = auth.uid(),
+           air_decision_note = 'ลองแอบตัดสิน'
+     where id = c_id;
+    get diagnostics n = row_count;
+    blocked := (n = 0);
+  exception when others then
+    blocked := true;
+  end;
+
+  select air_decision into after from public."case" where id = c_id;
+
+  insert into public._rls_result values
+    (15, 'T15 ★ ชุดลำเลียงตัดสินคำขอทางอากาศแทนศูนย์สั่งการไม่ได้',
+         case when blocked then 'PASS' else 'FAIL' end,
+         case when blocked then 'แก้ไป ' || greatest(n, 0) || ' แถว'
+              else 'ใครก็ตัดสินได้ ห้าม deploy' end),
+    -- อ่านค่าซ้ำอีกชั้น เพราะ row_count = 0 อาจเกิดจากเงื่อนไข where ไม่ตรงก็ได้
+    -- ข้อนี้ยืนยันว่าค่าที่อยู่ในฐานข้อมูล "ไม่ได้เปลี่ยน" จริงๆ
+    (16, 'T16 ผลการตัดสินเดิมไม่ถูกแก้โดยคนที่ไม่มีสิทธิ์',
+         case when after is not distinct from before then 'PASS' else 'FAIL' end,
+         'ก่อน=' || coalesce(before::text, 'null') || ' หลัง=' || coalesce(after::text, 'null'));
+end $$;
+
+reset role;
+
+
 -- =============================================================
 -- ผลรวม — ต้องเป็น PASS ทุกแถว
 -- =============================================================

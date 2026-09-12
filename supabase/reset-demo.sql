@@ -124,9 +124,104 @@ update public."case"
 --    ที่เหลือว่าง ยกเว้น DEMO-04 ที่ชุดจำลองตั้งเป็นซ่อมบำรุงไว้แต่แรก
 --    (ตั้งใจให้มีรถที่จัดไม่ได้อย่างน้อยหนึ่งคัน จะได้เห็นว่ากระดานแยกสถานะจริง)
 -- -------------------------------------------------------------
-update public.vehicle set status = 'available'   where call_sign in ('DEMO-02','DEMO-03','DEMO-05','DEMO-06','DEMO-07','DEMO-08','DEMO-09','DEMO-10');
+update public.vehicle set status = 'available'   where call_sign in ('DEMO-02','DEMO-03','DEMO-05','DEMO-06','DEMO-07','DEMO-08','DEMO-09','DEMO-10','DEMO-AIR-1');
 update public.vehicle set status = 'dispatched'  where call_sign = 'DEMO-01';
 update public.vehicle set status = 'maintenance' where call_sign = 'DEMO-04';
+
+
+-- -------------------------------------------------------------
+-- 4.5 คืนคำขอส่งกลับทางอากาศให้พร้อมสาธิตอีกรอบ (0025)
+--
+-- ศูนย์สั่งการต้องเห็นทั้งสองครึ่งของก้อน "คำขอทางอากาศ" ตอนขึ้นเวที
+--   ครึ่งบน  · คำขอที่ยังไม่ตัดสิน — มีปุ่มให้กด
+--   ครึ่งล่าง · คำขอที่ตัดสินไปแล้ว — เห็นว่าใครตัดสิน เมื่อไร เพราะอะไร
+-- ถ้ามีแต่ครึ่งบน คนดูจะไม่เห็นว่าระบบเก็บเหตุผลของการปฏิเสธไว้ด้วย
+--
+-- ⚠ ต้องล้างให้หมดก่อนแล้วค่อยตั้งใหม่ ไม่ใช่ update ทับ
+--   trigger set_case_form_timestamps ตั้ง air_decision_at ให้เฉพาะตอนที่
+--   ค่าเดิมเป็น null เท่านั้น (ตัดสินไปแล้วเวลาเดิมห้ามขยับ — เจตนาของ 0025)
+--   ถ้าไม่ล้างก่อน การซ้อมรอบที่สองจะได้เวลาของรอบแรกติดมาด้วย
+-- -------------------------------------------------------------
+update public."case"
+   set air_decision      = null,
+       air_decision_by   = null,
+       air_decision_note = null,
+       air_mode_granted  = null,
+       transport_mode    = 'ground';
+
+-- เคสที่ศูนย์สั่งการต้องตัดสินตอนเริ่ม demo — urgent/แดง และรอจัดรถอยู่ในคิวพอดี
+update public."case" set transport_mode = 'rotary' where case_code = 'MR-2569-0010';
+
+-- ตัวอย่างที่อนุมัติแล้ว และตัวอย่างที่ปฏิเสธพร้อมเหตุผล
+update public."case"
+   set transport_mode    = 'rotary',
+       air_decision      = 'approved',
+       air_decision_by   = (select id from public.profile where service_number = '9900000004'),
+       air_mode_granted  = 'rotary',
+       air_decision_note = 'ลานจอดที่กองพลพร้อม ทัศนวิสัยเกินเกณฑ์'
+ where case_code = 'MR-2569-0011';
+
+update public."case"
+   set transport_mode    = 'fixed_wing',
+       air_decision      = 'denied',
+       air_decision_by   = (select id from public.profile where service_number = '9900000004'),
+       -- ปฏิเสธ ฮ. แต่ยังอนุมัติให้ไปได้ทางรถ ซึ่งเป็นคำตอบที่พบบ่อยที่สุดหน้างาน
+       -- transport_mode ยังเป็น fixed_wing อยู่ — เวชระเบียนต้องตอบได้ว่าหน่วยขออะไรมา
+       air_mode_granted  = 'ground',
+       air_decision_note = 'ทัศนวิสัยต่ำกว่าเกณฑ์ · อนุมัติให้ใช้เส้นทางพื้นดินแทน'
+ where case_code = 'MR-2569-0009';
+
+
+-- -------------------------------------------------------------
+-- 4.6 ประวัติผู้ป่วยสมมติ สำหรับรายงานสรุปกำลังพลบาดเจ็บ (F7 · 12 ก.ย. 2569)
+--
+-- ทำไมต้องมี
+--   11 เคสของชุดจำลองถูกสร้างก่อนมีตาราง casualty (0019) และก่อนมีช่อง
+--   injury_place · patient_category ในฟอร์ม ผลคือไฟล์ export ขึ้น "-" ครึ่งตาราง
+--   ทั้งช่อง ชื่อ · สกุล · สังกัด · เหตุการณ์ · ประเภท ซึ่งดูเหมือนระบบพังบนเวที
+--
+-- ⚠ ชื่อทั้งหมดเป็นคำสมมติที่ไม่ใช่ชื่อคนทั่วไป และลงท้าย "(สมมติ)" ทุกแถว
+--   ไฟล์ Excel ที่ดาวน์โหลดออกไปจะบอกได้ด้วยตาทันทีว่าเป็นข้อมูลจำลอง
+--   สังกัดและสถานที่เป็นชื่อสมมติ ไม่ใช่หน่วยหรือฐานจริง (AI_RULES.md §2)
+--
+-- ประเภทผู้ป่วยตั้งตามกลไกที่ชุดจำลองมีอยู่แล้ว ไม่แต่งเคสยุทธการขึ้นมาใหม่
+--   ฝึก / อุบัติเหตุระหว่างฝึก → อื่นๆ · เจ็บป่วยระหว่างงานปกติ → ธุรการ
+--
+-- รันซ้ำได้ — casualty ใช้ on conflict (case_id) do update
+-- -------------------------------------------------------------
+create temp table _demo_casualty (
+  case_code text primary key, rank_th text, first_name text, last_name text,
+  affiliation text, injury_place text, category public.patient_category
+);
+insert into _demo_casualty values
+  ('MR-2569-0001', 'พลทหาร', 'กล้าหาญ',  'มั่นคง (สมมติ)',   'ร้อย.1 พัน.ก (สมมติ)', 'สนามฝึก ก (สมมติ)',       'other'),
+  ('MR-2569-0002', 'พลทหาร', 'ยืนหยัด',  'อดทน (สมมติ)',    'ร้อย.1 พัน.ก (สมมติ)', 'สนามฝึก ก (สมมติ)',       'admin'),
+  ('MR-2569-0003', 'ส.ต.',   'ภักดี',    'ว่องไว (สมมติ)',   'ร้อย.2 พัน.ก (สมมติ)', 'สนามฝึก ข (สมมติ)',       'other'),
+  ('MR-2569-0004', 'พลทหาร', 'เข้มแข็ง', 'ซื่อตรง (สมมติ)',  'ร้อย.2 พัน.ก (สมมติ)', 'สนามฝึก ก (สมมติ)',       'admin'),
+  ('MR-2569-0005', 'ส.ท.',   'รักชาติ',  'สามัคคี (สมมติ)',  'ร้อย.1 พัน.ก (สมมติ)', 'สนามฝึก ข (สมมติ)',       'other'),
+  ('MR-2569-0006', 'ส.อ.',   'เสียสละ',  'มานะ (สมมติ)',    'กองร้อยกองบังคับการ พัน.ก (สมมติ)', 'ที่ตั้งหน่วย (สมมติ)', 'admin'),
+  ('MR-2569-0007', 'พลทหาร', 'อาจหาญ',  'ทรหด (สมมติ)',    'ร้อย.3 พัน.ก (สมมติ)', 'สนามฝึก ข (สมมติ)',       'other'),
+  ('MR-2569-0008', 'พลทหาร', 'องอาจ',   'แกร่งกล้า (สมมติ)', 'ร้อย.1 พัน.ก (สมมติ)', 'สนามฝึก ก (สมมติ)',       'other'),
+  ('MR-2569-0009', 'จ.ส.อ.', 'ขยัน',     'ประหยัด (สมมติ)',  'กองร้อยกองบังคับการ พัน.ก (สมมติ)', 'ที่ตั้งหน่วย (สมมติ)', 'admin'),
+  ('MR-2569-0010', 'ส.อ.',   'สุจริต',   'เที่ยงธรรม (สมมติ)', 'ร้อย.3 พัน.ข (สมมติ)', 'ฐานปฏิบัติการ ข (สมมติ)', 'admin'),
+  ('MR-2569-0011', 'พลทหาร', 'มุ่งมั่น',  'ไม่ท้อ (สมมติ)',   'ร้อย.2 พัน.ก (สมมติ)', 'สนามฝึก ข (สมมติ)',       'other');
+
+insert into public.casualty (case_id, rank_th, first_name, last_name, affiliation, recorded_by)
+select c.id, d.rank_th, d.first_name, d.last_name, d.affiliation,
+       (select id from public.profile where service_number = '9900000001')
+  from _demo_casualty d
+  join public."case" c on c.case_code = d.case_code
+on conflict (case_id) do update
+   set rank_th     = excluded.rank_th,
+       first_name  = excluded.first_name,
+       last_name   = excluded.last_name,
+       affiliation = excluded.affiliation;
+
+update public."case" c
+   set injury_place     = d.injury_place,
+       patient_category = d.category
+  from _demo_casualty d
+ where c.case_code = d.case_code;
 
 
 -- -------------------------------------------------------------
@@ -139,11 +234,17 @@ select
   (select count(*) from public.transfer_leg
      where status in ('dispatched','on_scene','in_transit','arrived'))         as กำลังเดินทาง,
   (select count(*) from public.v_leg_metrics)                                  as ทอดที่วัดเวลาได้,
-  (select count(*) from public.vehicle where status = 'available')             as รถว่าง;
+  (select count(*) from public.vehicle where status = 'available')             as รถว่าง,
+  (select count(*) from public."case"
+     where transport_mode in ('rotary','fixed_wing') and air_decision is null) as คำขอทางอากาศรออนุมัติ,
+  (select count(*) from public."case" where air_decision is not null)          as ตัดสินไปแล้ว;
 
 select
   case when (select count(*) from public.transfer_leg where status = 'pending') >= 1
         and (select count(*) from public.transfer_leg where status = 'in_transit') >= 1
         and (select count(*) from public.vehicle where status = 'available') >= 1
-       then '✅ พร้อมสาธิต — มีเคสรอจัดรถ มีเคสกำลังเดินทาง และมีรถว่าง'
+        and (select count(*) from public."case"
+               where transport_mode in ('rotary','fixed_wing') and air_decision is null) >= 1
+        and (select count(*) from public."case" where air_decision is not null) >= 1
+       then '✅ พร้อมสาธิต — มีเคสรอจัดรถ มีเคสกำลังเดินทาง มีรถว่าง และมีคำขอทางอากาศทั้งที่รอและที่ตัดสินแล้ว'
        else '🛑 ยังไม่พร้อม ตรวจตารางด้านบน' end as สถานะ;
